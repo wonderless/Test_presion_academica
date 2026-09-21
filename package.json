@@ -1,0 +1,49 @@
+{
+  "name": "afrontamiento-tension-academica",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^5.10.0"
+    }
+  },
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-afrontamiento \"node tests/firestore.rules.test.mjs\"",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-afrontamiento \"playwright test\""
+  },
+  "dependencies": {
+    "firebase": "^12.18.0",
+    "firebase-admin": "^14.3.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^0.479.0",
+    "next": "^15.5.25",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^15.5.25",
+    "jsdom": "^30.0.1",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "vitest": "^5.0.0"
+  }
+}

@@ -1,0 +1,99 @@
+rules_version = '2';
+
+// PASO B — cada quien accede solo a lo suyo.
+//
+// El paso A cortó el acceso anónimo, pero cualquier participante con sesión
+// aún podía leer los expedientes de los demás. Aquí se restringe por dueño y
+// por rol.
+//
+// Requiere el código que filtra en la consulta (ListaUsers y OtherData usan
+// `where("invitationCode", "==", ...)`): Firestore no recorta los resultados
+// según las reglas, sino que rechaza la consulta entera si algún documento
+// devuelto no pasa. Una consulta a la colección `users` sin ese filtro falla.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function haySesion() {
+      return request.auth != null;
+    }
+
+    function esSuperadmin() {
+      return haySesion()
+        && exists(/databases/$(database)/documents/superadmins/$(request.auth.uid));
+    }
+
+    function esAdmin() {
+      return haySesion()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function codigoDelAdmin() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid))
+        .data.invitationCode;
+    }
+
+    // Expedientes de los participantes: datos personales, respuestas del test
+    // y perfil psicológico.
+    match /users/{uid} {
+      // El propio participante, o el administrador que lo invitó.
+      allow read: if (haySesion() && request.auth.uid == uid)
+        || (esAdmin() && resource.data.invitationCode == codigoDelAdmin());
+
+      // Solo el propio participante escribe su expediente: el registro lo crea
+      // y el test y las actividades lo van actualizando.
+      //
+      // El vínculo con el administrador se guarda en dos campos que tienen que
+      // decir lo mismo: `invitationCode`, que usan los paneles y la regla de
+      // lectura de arriba, y `adminId`, que usa el borrado en cascada. El
+      // documento lo escribe el navegador, así que sin estas comprobaciones un
+      // participante podía guardar cualquier combinación —o cambiarla después—
+      // y dejar el expediente visible para un administrador pero fuera de la
+      // cascada de otro, o al revés.
+
+      // Al registrarse, `adminId` tiene que ser un administrador real y el
+      // código guardado tiene que ser exactamente el suyo.
+      allow create: if haySesion() && request.auth.uid == uid
+        && request.resource.data.adminId is string
+        && exists(/databases/$(database)/documents/admins/$(request.resource.data.adminId))
+        && get(/databases/$(database)/documents/admins/$(request.resource.data.adminId))
+             .data.invitationCode == request.resource.data.invitationCode;
+
+      // Después, el test y las actividades se siguen guardando, pero el vínculo
+      // no se mueve. Se compara con `get(campo, null)` para no bloquear a un
+      // expediente antiguo al que le falte alguno de los dos campos: acceder a
+      // un campo inexistente hace fallar la regla entera.
+      allow update: if haySesion() && request.auth.uid == uid
+        && request.resource.data.get("adminId", null) == resource.data.get("adminId", null)
+        && request.resource.data.get("invitationCode", null) == resource.data.get("invitationCode", null);
+
+      // Borrar participantes se hace desde el servidor con el Admin SDK
+      // (/api/admin/delete-users-by-admin), que no pasa por estas reglas.
+      allow delete: if false;
+    }
+
+    // Administradores. Contiene el código de invitación, así que no puede
+    // quedar legible para cualquiera: el registro valida el código en el
+    // servidor (/api/auth/validate-invitation), no desde el navegador.
+    match /admins/{uid} {
+      // Cada admin lee su propio documento — AuthContext lo necesita para
+      // resolver el rol — y el superadmin lee la lista completa.
+      allow read: if (haySesion() && request.auth.uid == uid) || esSuperadmin();
+
+      // Crear y eliminar administradores es cosa del superadmin.
+      allow write: if esSuperadmin();
+    }
+
+    match /superadmins/{uid} {
+      // AuthContext consulta esta colección al resolver el rol de cualquiera
+      // que inicia sesión, así que cada uno debe poder preguntar por su propio
+      // documento aunque no exista.
+      allow read: if haySesion() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Cualquier otra colección queda cerrada.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
