@@ -97,14 +97,19 @@ const UserDashboard = () => {
       </h1>
 
       <div className="mb-4 text-center">
-        <h2 className="text-lg font-semibold">AUTOR:</h2>
-        <p>Alex Grajeda Montalvo</p>
-        <p>Ashley Yazbel Arteaga Torres</p>
-        <p>Eliane Ruth Aynaya Camayo</p>
-        <p>Joao Sebastian Salvador Vega </p>
-        <p>Carlos Manuel Sosa Lupuche</p>
-        <p>Aragon Josue Tafur Arzapalo</p>
-        
+        <h2 className="text-lg font-semibold">AUTORES:</h2>
+        {[
+          "Alex Grajeda-Montalvo",
+          "Ashley Arteaga",
+          "Eliane Aynaya",
+          "Alexa Casas",
+          "Joao Salvador",
+          "Manuel Sosa",
+          "Aragon Tafur",
+          "Yasmin Castillo",
+        ].map((autor) => (
+          <p key={autor}>{autor}</p>
+        ))}
       </div>
 
       {estado && permiteEntrarAlTest(estado) ? (
