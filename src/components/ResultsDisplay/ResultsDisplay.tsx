@@ -84,6 +84,21 @@ interface RecommendationStatus {
   };
 }
 
+// Momento en que se abre el día siguiente de una recomendación en espera.
+const momentoDeDesbloqueo = (countdownStartTime: number): Date =>
+  new Date(countdownStartTime + UNLOCK_DELAY_SECONDS * 1000);
+
+// "21:30 del 8 de septiembre". La tarjeta en espera y el aviso de pendientes
+// dan la hora igual, para que se reconozca como la misma.
+const formatearDesbloqueo = (momento: Date): string =>
+  `${momento.toLocaleTimeString("es-PE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })} del ${momento.toLocaleDateString("es-PE", {
+    day: "numeric",
+    month: "long",
+  })}`;
+
 // Componente optimizado para mostrar el countdown sin re-renderizar el resto
 const CountdownDisplay = memo<{
   countdownStartTime: number;
@@ -106,20 +121,12 @@ const CountdownDisplay = memo<{
 
   // No se muestra una cuenta atrás sino la hora absoluta de desbloqueo: con
   // doce horas por delante, una cuenta atrás obliga a hacer la suma mentalmente.
-  const unlockTime = new Date(
-    countdownStartTime + UNLOCK_DELAY_SECONDS * 1000
-  );
+  const unlockTime = momentoDeDesbloqueo(countdownStartTime);
 
   return (
     <span>
       {timeRemaining > 0
-        ? `Se desbloqueará la actividad a las ${unlockTime.toLocaleTimeString("es-PE", {
-            hour: "2-digit",
-            minute: "2-digit",
-          })} del ${unlockTime.toLocaleDateString("es-PE", {
-            day: "numeric",
-            month: "long",
-          })}`
+        ? `Se desbloqueará la actividad a las ${formatearDesbloqueo(unlockTime)}`
         : "¡Ya disponible!"}
     </span>
   );
@@ -471,6 +478,10 @@ export const ResultsDisplay = ({ userId }: Props) => {
   const [feedbackAnswers, setFeedbackAnswers] = useState<
     Record<string, boolean>
   >({});
+  // Se intentó enviar la retroalimentación con preguntas sin responder. Antes
+  // se avisaba con un alert() del navegador; ahora el aviso va dentro del
+  // propio cuadro y marca las preguntas que faltan.
+  const [faltanRespuestas, setFaltanRespuestas] = useState(false);
   const [currentModeIndex, setCurrentModeIndex] = useState(0);
 
   // Temporizadores activos
@@ -654,6 +665,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
           if (recommendation.feedbackQuestions?.length) {
             setCurrentFeedbackRec(recommendation);
             setFeedbackAnswers({});
+            setFaltanRespuestas(false);
             setShowFeedbackModal(true);
           }
         } else {
@@ -848,9 +860,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
       setCurrentFeedbackRec(null);
       setFeedbackAnswers({});
     } else {
-      alert(
-        "Por favor, responde a todas las preguntas de retroalimentación antes de continuar."
-      );
+      setFaltanRespuestas(true);
     }
   }, [currentFeedbackRec, feedbackAnswers, userId, esSegundoIntento]);
 
@@ -1117,11 +1127,22 @@ export const ResultsDisplay = ({ userId }: Props) => {
   //     veces recorra todas. null si el ítem que se ve ya es uno disponible
   //     —no hay adónde ir— o si no queda ninguno disponible.
   //   · `todasEnEspera`: quedan pendientes pero ninguna se puede hacer ahora.
+  //     Entonces `proximoDesbloqueo` dice cuándo se abre la primera, y
+  //     `destino` lleva a ella —no a la siguiente en orden—: como ninguna otra
+  //     se abre antes, la persona no se queda mirando una en espera mientras
+  //     otra ya está libre. Si ya la está viendo, `destino` es null.
   const navegacionPendientes = useMemo(() => {
-    const info: Record<string, { destino: number | null; todasEnEspera: boolean }> =
-      {};
+    const info: Record<
+      string,
+      {
+        destino: number | null;
+        todasEnEspera: boolean;
+        proximoDesbloqueo: Date | null;
+      }
+    > = {};
+    const ahora = Date.now();
     for (const mode of MODES) {
-      info[mode] = { destino: null, todasEnEspera: false };
+      info[mode] = { destino: null, todasEnEspera: false, proximoDesbloqueo: null };
       const modeData = results?.[mode];
       const modeStatus = recommendationStatus?.[mode];
       if (!userTestAnswers || !modeData || !modeStatus || modeData.level !== "BAJO") {
@@ -1133,25 +1154,59 @@ export const ResultsDisplay = ({ userId }: Props) => {
         modeData.level,
         userTestAnswers
       );
-      const disponible = (questionNum: number) =>
-        recomendaciones.some((rec) => {
-          if (rec.relatedQuestion !== questionNum) return false;
-          const progreso = modeStatus.recommendationProgress?.[rec.id];
-          const enEspera =
-            progreso?.countdown !== null && progreso?.countdown !== undefined;
-          return progreso?.isCompleted !== true && !enEspera;
-        });
+      const progresoDe = (questionNum: number) => {
+        const rec = recomendaciones.find(
+          (r) => r.relatedQuestion === questionNum
+        );
+        return rec ? modeStatus.recommendationProgress?.[rec.id] : undefined;
+      };
+      // Una espera que ya venció cuenta como disponible aunque la limpieza
+      // periódica aún no la haya abierto: al llegar a ella, su tarjeta la
+      // abre en el acto.
+      const desbloqueoPendiente = (questionNum: number): Date | null => {
+        const progreso = progresoDe(questionNum);
+        if (progreso?.countdown === null || progreso?.countdown === undefined) {
+          return null;
+        }
+        if (!progreso.countdownStartTime) return null;
+        const momento = momentoDeDesbloqueo(progreso.countdownStartTime);
+        return momento.getTime() > ahora ? momento : null;
+      };
+      const disponible = (questionNum: number) => {
+        const progreso = progresoDe(questionNum);
+        return (
+          !!progreso &&
+          progreso.isCompleted !== true &&
+          desbloqueoPendiente(questionNum) === null
+        );
+      };
 
       const preguntas = modeQuestions[mode];
-      if (!preguntas.some(disponible)) {
-        info[mode].todasEnEspera = pendientesPorModo[mode] > 0;
-        continue;
-      }
-
       const indiceVisible = Math.min(
         Math.max(modeStatus.currentQuestionIndex ?? 0, 0),
         preguntas.length - 1
       );
+
+      if (!preguntas.some(disponible)) {
+        if (pendientesPorModo[mode] === 0) continue;
+        info[mode].todasEnEspera = true;
+
+        let primero: number | null = null;
+        preguntas.forEach((questionNum, indice) => {
+          const momento = desbloqueoPendiente(questionNum);
+          if (!momento) return;
+          if (
+            info[mode].proximoDesbloqueo === null ||
+            momento < info[mode].proximoDesbloqueo!
+          ) {
+            info[mode].proximoDesbloqueo = momento;
+            primero = indice;
+          }
+        });
+        info[mode].destino = primero === indiceVisible ? null : primero;
+        continue;
+      }
+
       if (disponible(preguntas[indiceVisible])) continue;
 
       for (let paso = 1; paso <= preguntas.length; paso++) {
@@ -1352,7 +1407,8 @@ export const ResultsDisplay = ({ userId }: Props) => {
               <ul className="mt-2 space-y-2">
                 {modosPendientes.map((mode) => {
                   const esActual = mode === currentMode;
-                  const { destino, todasEnEspera } = navegacionPendientes[mode];
+                  const { destino, todasEnEspera, proximoDesbloqueo } =
+                    navegacionPendientes[mode];
                   return (
                     <li
                       key={mode}
@@ -1368,7 +1424,11 @@ export const ResultsDisplay = ({ userId }: Props) => {
                         {pendientesPorModo[mode] === 1
                           ? "ítem pendiente"
                           : "ítems pendientes"}
-                        {todasEnEspera ? ", en espera" : ""}
+                        {todasEnEspera && proximoDesbloqueo
+                          ? `. El próximo se desbloquea a las ${formatearDesbloqueo(
+                              proximoDesbloqueo
+                            )}`
+                          : ""}
                       </span>
                       {esActual ? (
                         destino !== null && (
@@ -1377,7 +1437,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
                             onClick={() => handleQuestionChange(mode, destino)}
                             className="px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
                           >
-                            Ver actividad pendiente
+                            {todasEnEspera ? "Ver ese ítem" : "Ver actividad pendiente"}
                           </button>
                         )
                       ) : (
@@ -1571,37 +1631,62 @@ export const ResultsDisplay = ({ userId }: Props) => {
             <p className="text-sm text-gray-600 mb-3 sm:mb-4">
               {questionText(currentFeedbackRec.relatedQuestion)}
             </p>
-            {currentFeedbackRec.feedbackQuestions?.map((q) => (
-              <div key={q.key} className="mb-3 sm:mb-4">
-                <p className="font-medium mb-2 text-sm sm:text-base">
-                  {q.question}
-                </p>
-                <div className="flex space-x-4">
-                  <label className="inline-flex items-center">
-                    <input
-                      type="radio"
-                      className="form-radio"
-                      name={q.key}
-                      value="true"
-                      checked={feedbackAnswers[q.key] === true}
-                      onChange={() => handleFeedbackSubmit(q.key, true)}
-                    />
-                    <span className="ml-2 text-sm sm:text-base">Sí</span>
-                  </label>
-                  <label className="inline-flex items-center">
-                    <input
-                      type="radio"
-                      className="form-radio"
-                      name={q.key}
-                      value="false"
-                      checked={feedbackAnswers[q.key] === false}
-                      onChange={() => handleFeedbackSubmit(q.key, false)}
-                    />
-                    <span className="ml-2 text-sm sm:text-base">No</span>
-                  </label>
+            {currentFeedbackRec.feedbackQuestions?.map((q) => {
+              const sinResponder =
+                faltanRespuestas &&
+                !Object.prototype.hasOwnProperty.call(feedbackAnswers, q.key);
+              return (
+                <div
+                  key={q.key}
+                  className={`mb-3 sm:mb-4 rounded-md ${
+                    sinResponder ? "border border-red-300 bg-red-50 p-2" : ""
+                  }`}
+                >
+                  <p className="font-medium mb-2 text-sm sm:text-base">
+                    {q.question}
+                  </p>
+                  <div className="flex space-x-4">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="radio"
+                        className="form-radio"
+                        name={q.key}
+                        value="true"
+                        checked={feedbackAnswers[q.key] === true}
+                        onChange={() => handleFeedbackSubmit(q.key, true)}
+                      />
+                      <span className="ml-2 text-sm sm:text-base">Sí</span>
+                    </label>
+                    <label className="inline-flex items-center">
+                      <input
+                        type="radio"
+                        className="form-radio"
+                        name={q.key}
+                        value="false"
+                        checked={feedbackAnswers[q.key] === false}
+                        onChange={() => handleFeedbackSubmit(q.key, false)}
+                      />
+                      <span className="ml-2 text-sm sm:text-base">No</span>
+                    </label>
+                  </div>
                 </div>
+              );
+            })}
+            {/* Se retira en cuanto no falta ninguna, sin esperar a que se
+                vuelva a pulsar "Enviar". */}
+            {faltanRespuestas &&
+              currentFeedbackRec.feedbackQuestions?.some(
+                (q) =>
+                  !Object.prototype.hasOwnProperty.call(feedbackAnswers, q.key)
+              ) && (
+              <div
+                role="alert"
+                className="mt-2 rounded-md border-l-4 border-red-500 bg-red-50 p-3 text-sm text-red-800"
+              >
+                Por favor, responde a todas las preguntas de retroalimentación
+                antes de continuar.
               </div>
-            ))}
+            )}
             <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4 mt-4 sm:mt-6">
               <button
                 onClick={handleCloseFeedbackModal}
