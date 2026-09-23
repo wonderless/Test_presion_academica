@@ -84,7 +84,56 @@ export const MODE_INTERPRETATIONS: Record<Mode, Record<Level, Interpretation>> =
   },
 }
 
-// Encabezado que abre el plan de actividades de un modo bajo. Es el párrafo con
-// el que el programa introduce las orientaciones de cada modo.
-export const planIntro = (modeLabel: string): string =>
-  `Con respecto a los resultados obtenidos, se pudo observar un nivel bajo en el modo de afrontamiento ${modeLabel.toLowerCase()}. Con el propósito de mejorar este nivel se deben realizar actividades durante los próximos días.`
+// "Speech de interpretación": lo que se le dice a la persona, en segunda
+// persona, en el recuadro de cada modo de la pantalla de resultados. Viene del
+// documento "Consideraciones - Test de Tensión Académica", palabra por palabra.
+//
+// No sustituye a MODE_INTERPRETATIONS: la tabla del perfil sigue mostrando las
+// definiciones del instrumento, que son las que cita el administrador.
+//
+// El documento escribe un solo texto para "Nivel bajo o medio" con un hueco
+// "medio/bajo" que se rellena según el nivel alcanzado.
+export const MODE_SPEECH: Record<
+  Mode,
+  { bajoOMedio: (nivel: "bajo" | "medio") => string; alto: string }
+> = {
+  responsable: {
+    bajoOMedio: (nivel) =>
+      `Con respecto a los resultados obtenidos, se evidencia que presentas un nivel ${nivel} del Modo de afrontamiento responsable, lo cual, indica la existencia de oportunidades de mejora para gestionar el tiempo, trabajar de manera óptima en equipos o enfrentar de forma adecuada las exigencias académicas.`,
+    alto:
+      "¡Felicitaciones! Los resultados obtenidos demuestran que posees un nivel alto en el Modo de afrontamiento responsable, lo cual explica que posees un sentido de responsabilidad altamente consolidado, así como la capacidad para minimizar la tensión percibida mediante un manejo adecuado de conflictos de índole interpersonal o académico.",
+  },
+  organizado: {
+    bajoOMedio: (nivel) =>
+      `En relación a los resultados obtenidos, se evidencia que presentas un nivel ${nivel} del Modo de afrontamiento organizado, lo cual, indica la existencia de oportunidades de mejora para gestionar el estrés y la ansiedad frente a exámenes, sobrecarga académica u otras actividades relacionadas.`,
+    alto:
+      "¡Felicitaciones! Los resultados obtenidos demuestran que posees un nivel alto en el Modo de afrontamiento organizado, lo cual explica que posees una capacidad óptima para gestionar el tiempo y las emociones durante procesos de exigencia académica, reduciendo de forma significativa el estrés percibido.",
+  },
+  activadorFisiologico: {
+    bajoOMedio: (nivel) =>
+      `Con respecto a los resultados obtenidos, se evidencia que presentas un nivel ${nivel} del Modo de afrontamiento activador fisiológico, lo cual, indica la existencia de oportunidades de mejora para el uso de técnicas orientadas a la regulación nerviosa para reducir el estrés y tensión académica.`,
+    alto:
+      "¡Felicitaciones! Los resultados obtenidos demuestran que posees un nivel alto en el Modo de afrontamiento activador fisiológico, lo cual indica que realizas de forma satisfactoria estrategias y técnicas de regulación nerviosa, lo que se evidencia en un mejor manejo del estrés para preservar un rendimiento académico óptimo.",
+  },
+}
+
+export const modeSpeech = (mode: Mode, level: Level): string =>
+  level === "ALTO"
+    ? MODE_SPEECH[mode].alto
+    : MODE_SPEECH[mode].bajoOMedio(level === "BAJO" ? "bajo" : "medio")
+
+// Cierra el speech de "Nivel bajo o medio" en el documento, pero solo se
+// muestra con nivel BAJO: con MEDIO no se abren actividades, y la frase
+// anunciaría unas que nunca aparecen.
+export const PLAN_INVITACION =
+  "Con el propósito de mejorar en el modo descrito, se recomienda seguir con las siguientes actividades durante los próximos días."
+
+// "Speech de finalización / compleción de actividades", del mismo documento.
+// Se muestra al completar todas las actividades del primer intento, junto al
+// botón para repetir el test al que invita.
+export const SPEECH_FINALIZACION: string[] = [
+  "¡Felicidades! Has culminado exitosamente con el programa de actividades para mejorar tus estrategias de afrontamiento al estrés. El esfuerzo realizado a través del tiempo invertido para culminar con las actividades planteadas demuestra un gran nivel de compromiso y responsabilidad, lo cual es un primer gran paso para poder mejorar en tu desempeño académico y ámbitos relacionados al estudio.",
+  "Para poder revisar tu mejoría, te invitamos a completar nuevamente el test y obtener una nueva representación de tus resultados.",
+  "De antemano, te deseamos lo mejor y esperamos que cada una de las técnicas descritas te permitan continuar mejorando para preservar un rendimiento académico satisfactorio.",
+  "¡Muchos éxitos!",
+]

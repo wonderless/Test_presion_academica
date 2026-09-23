@@ -171,8 +171,9 @@ test y otro.
 
 **`hasRetakenTest` se escribe al ENVIAR el test, no al empezarlo**, en la misma
 operación que las respuestas. Cuando se marcaba al abrir el formulario, quien lo
-abandonaba se quedaba con el segundo intento consumido sin haber respondido nada:
-hubo 15 expedientes así.
+abandonaba se quedaba con el segundo intento consumido sin haber respondido nada.
+Llegó a haber 15 expedientes así; ya no queda ninguno (comprobado el 22 de
+septiembre de 2026: ningún participante tiene `hasRetakenTest` sin `answers2`).
 
 **La decisión de en qué casilla escribir no se delega en una marca previa.**
 `TestForm.handleSubmit` se lo pregunta a `testAccess.ts` con las respuestas ya en
@@ -364,12 +365,14 @@ src/
 ├── constants/
 │   ├── questions.ts               # Los 24 ítems, los modos y los cortes
 │   ├── recommendations.ts         # Actividades por ítem y día
-│   └── interpretations.ts         # Textos de interpretación psicológica
+│   └── interpretations.ts         # Interpretación del instrumento y mensajes al participante
 ├── contexts/AuthContext.tsx
 ├── lib/
 │   ├── auth/verifySession.ts      # Verificación del token con jose
+│   ├── celebracion.ts             # Confeti al completar actividades
 │   ├── firebase/                  # config.ts (cliente) y admin.ts (servidor)
 │   ├── scoring.ts                 # Puntuación y apertura de actividades
+│   ├── sonido.ts                  # Campanita que acompaña al confeti
 │   ├── testAccess.ts              # Quién puede hacer el test
 │   └── terms.ts                   # Consentimiento informado
 ├── middleware.ts

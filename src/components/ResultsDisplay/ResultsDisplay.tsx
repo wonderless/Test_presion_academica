@@ -15,7 +15,11 @@ import {
   type Results,
   type TotalScore,
 } from "@/lib/scoring";
-import { MODE_INTERPRETATIONS, planIntro } from "@/constants/interpretations";
+import {
+  modeSpeech,
+  PLAN_INVITACION,
+  SPEECH_FINALIZACION,
+} from "@/constants/interpretations";
 import type {
   ActivityBlock,
   RecommendationItem,
@@ -25,6 +29,12 @@ import { useRouter } from "next/navigation";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import PsychologicalProfile from "./PsychologicalProfile";
+import {
+  celebrarActividad,
+  celebrarDia,
+  celebrarRecomendacion,
+  celebrarPrograma,
+} from "@/lib/celebracion";
 
 interface Props {
   userId: string;
@@ -615,6 +625,11 @@ export const ResultsDisplay = ({ userId }: Props) => {
       // hecho la intervención que ese intento existe para medir.
       const recomendacionCompletada = isLastActivityOfDay && isLastDay;
 
+      // Confeti proporcional a lo que se acaba de completar.
+      if (recomendacionCompletada) celebrarRecomendacion();
+      else if (isLastActivityOfDay) celebrarDia();
+      else celebrarActividad();
+
       if (isLastActivityOfDay) {
         if (isLastDay) {
           // Completar toda la recomendación
@@ -1057,6 +1072,99 @@ export const ResultsDisplay = ({ userId }: Props) => {
   const currentModeData = results?.[currentMode];
   const currentModeStatus = recommendationStatus?.[currentMode];
 
+  // Cuántas actividades le quedan por hacer en cada modo. Es la base de todos
+  // los avisos de abajo: la pantalla ya sabe exactamente dónde falta trabajo,
+  // así que puede decirlo en lugar de pedirle a la persona que lo busque.
+  const pendientesPorModo = useMemo(() => {
+    const pendientes: Record<string, number> = {};
+    for (const mode of MODES) {
+      const modeData = results?.[mode];
+      const modeStatus = recommendationStatus?.[mode];
+      if (!modeData || !modeStatus || modeData.level !== "BAJO") {
+        pendientes[mode] = 0;
+        continue;
+      }
+      const recomendaciones = getRecommendationsForMode(
+        mode,
+        modeData.level,
+        userTestAnswers || {}
+      );
+      pendientes[mode] = recomendaciones.filter(
+        (rec) => modeStatus.recommendationProgress?.[rec.id]?.isCompleted !== true
+      ).length;
+    }
+    return pendientes;
+  }, [results, recommendationStatus, userTestAnswers]);
+
+  // Modos con trabajo pendiente, incluido el que se está viendo. Los otros
+  // cubren el caso de quien llega al último modo, lo ve sin actividades porque
+  // le salió ALTO, y da por terminado el programa cuando le quedan actividades
+  // en los modos por los que ya pasó. El actual cubre el de quien termina el
+  // último ítem de un modo y cree acabado el modo entero, sin pulsar
+  // "Anterior", donde todavía le quedan.
+  const modosPendientes = useMemo(
+    () => MODES.filter((mode) => pendientesPorModo[mode] > 0),
+    [pendientesPorModo]
+  );
+
+  // Adónde llevan los botones del aviso en cada modo. Una actividad pendiente
+  // puede estar DISPONIBLE o EN ESPERA de las 12 horas que separan un día del
+  // siguiente. Mandar a la persona a una en espera la deja sin nada que hacer,
+  // así que los botones saltan a la siguiente disponible:
+  //
+  //   · `destino`: ítem al que saltar, buscando hacia delante desde el que se
+  //     ve y volviendo al principio al llegar al final, para que pulsar varias
+  //     veces recorra todas. null si el ítem que se ve ya es uno disponible
+  //     —no hay adónde ir— o si no queda ninguno disponible.
+  //   · `todasEnEspera`: quedan pendientes pero ninguna se puede hacer ahora.
+  const navegacionPendientes = useMemo(() => {
+    const info: Record<string, { destino: number | null; todasEnEspera: boolean }> =
+      {};
+    for (const mode of MODES) {
+      info[mode] = { destino: null, todasEnEspera: false };
+      const modeData = results?.[mode];
+      const modeStatus = recommendationStatus?.[mode];
+      if (!userTestAnswers || !modeData || !modeStatus || modeData.level !== "BAJO") {
+        continue;
+      }
+
+      const recomendaciones = getRecommendationsForMode(
+        mode,
+        modeData.level,
+        userTestAnswers
+      );
+      const disponible = (questionNum: number) =>
+        recomendaciones.some((rec) => {
+          if (rec.relatedQuestion !== questionNum) return false;
+          const progreso = modeStatus.recommendationProgress?.[rec.id];
+          const enEspera =
+            progreso?.countdown !== null && progreso?.countdown !== undefined;
+          return progreso?.isCompleted !== true && !enEspera;
+        });
+
+      const preguntas = modeQuestions[mode];
+      if (!preguntas.some(disponible)) {
+        info[mode].todasEnEspera = pendientesPorModo[mode] > 0;
+        continue;
+      }
+
+      const indiceVisible = Math.min(
+        Math.max(modeStatus.currentQuestionIndex ?? 0, 0),
+        preguntas.length - 1
+      );
+      if (disponible(preguntas[indiceVisible])) continue;
+
+      for (let paso = 1; paso <= preguntas.length; paso++) {
+        const indice = (indiceVisible + paso) % preguntas.length;
+        if (disponible(preguntas[indice])) {
+          info[mode].destino = indice;
+          break;
+        }
+      }
+    }
+    return info;
+  }, [results, recommendationStatus, userTestAnswers, pendientesPorModo]);
+
   // ¿Están completas todas las actividades de todos los modos?
   const areAllModesCompleted = useCallback(() => {
     return MODES.every((mode) => {
@@ -1077,6 +1185,25 @@ export const ResultsDisplay = ({ userId }: Props) => {
       );
     });
   }, [results, recommendationStatus, userTestAnswers]);
+
+  // Confeti de fin de programa: solo cuando se completa DURANTE la sesión, al
+  // pasar de "quedan actividades" a "no queda ninguna". Quien entra con todo ya
+  // hecho no lo vuelve a ver en cada recarga. El primer valor tras la carga se
+  // toma como punto de partida y no celebra.
+  //
+  // Se espera al progreso y no solo a `results`: los resultados se fijan antes
+  // de leer el progreso, y tomar ese instante como partida hacía celebrar al
+  // recargar con todo hecho.
+  const progresoCargado =
+    !!results && Object.keys(recommendationStatus).length > 0;
+  const programaCompleto = progresoCargado && areAllModesCompleted();
+  const programaCompletoAntes = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!progresoCargado) return;
+    const antes = programaCompletoAntes.current;
+    programaCompletoAntes.current = programaCompleto;
+    if (antes === false && programaCompleto) celebrarPrograma();
+  }, [programaCompleto, progresoCargado]);
 
   const isCurrentModeCompleted = useCallback(() => {
     if (!currentModeData || !currentModeStatus) return false;
@@ -1174,27 +1301,103 @@ export const ResultsDisplay = ({ userId }: Props) => {
             Orientaciones y recomendaciones a seguir
           </h2>
 
-          {/* Indicador de progreso entre modos */}
+          {/* Indicador de progreso entre modos.
+              Los puntos se pintan por el trabajo que queda, no por los modos
+              por los que se ha pasado. Antes se ponían verdes con solo
+              visitarlos, así que quien llegaba al último veía dos verdes
+              detrás y daba por hecho que estaban terminados aunque tuviera
+              actividades pendientes en ellos. Ahora ámbar es "quedan
+              actividades" y verde es "no queda nada". */}
           <div className="mb-4 sm:mb-6">
-            <div className="flex justify-center space-x-2 mb-3 sm:mb-4">
-              {MODES.map((mode, index) => (
-                <div
-                  key={mode}
-                  className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${
-                    index === currentModeIndex
-                      ? "bg-blue-600"
-                      : index < currentModeIndex
-                      ? "bg-green-500"
-                      : "bg-gray-300"
-                  }`}
-                />
-              ))}
+            <div className="flex justify-center items-center gap-2 mb-3 sm:mb-4">
+              {MODES.map((mode, index) => {
+                const pendientes = pendientesPorModo[mode] ?? 0;
+                const esActual = index === currentModeIndex;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setCurrentModeIndex(index)}
+                    aria-label={`${MODE_LABELS[mode]}: ${
+                      pendientes > 0
+                        ? `${pendientes} ${
+                            pendientes === 1 ? "ítem pendiente" : "ítems pendientes"
+                          }`
+                        : "sin ítems pendientes"
+                    }`}
+                    aria-current={esActual ? "true" : undefined}
+                    className={`rounded-full transition-all ${
+                      esActual ? "w-4 h-4 sm:w-5 sm:h-5" : "w-3 h-3 sm:w-4 sm:h-4"
+                    } ${pendientes > 0 ? "bg-amber-400" : "bg-green-500"} ${
+                      esActual ? "ring-2 ring-white ring-offset-2 ring-offset-mi-color-rgb" : "opacity-80 hover:opacity-100"
+                    }`}
+                  />
+                );
+              })}
             </div>
             <p className="text-center text-white text-xs sm:text-sm">
               Modo {currentModeIndex + 1} de {MODES.length}:{" "}
               {MODE_LABELS[currentMode]}
             </p>
           </div>
+
+          {/* Aviso de trabajo pendiente. No dice "revise las pestañas
+              anteriores": dice en qué modos y cuántas actividades quedan, y
+              lleva hasta allí. La pantalla ya tiene ese dato. */}
+          {modosPendientes.length > 0 && (
+            <div className="mb-4 sm:mb-6 bg-amber-100 border-l-4 border-amber-500 rounded-lg p-3 sm:p-4">
+              <p className="font-bold text-amber-900 text-sm sm:text-base">
+                Todavía te quedan actividades por hacer
+              </p>
+              <ul className="mt-2 space-y-2">
+                {modosPendientes.map((mode) => {
+                  const esActual = mode === currentMode;
+                  const { destino, todasEnEspera } = navegacionPendientes[mode];
+                  return (
+                    <li
+                      key={mode}
+                      className="flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <span className="text-amber-900 text-sm sm:text-base">
+                        <strong>{MODE_LABELS[mode]}</strong>
+                        {esActual ? " (estás aquí)" : ""}:{" "}
+                        {pendientesPorModo[mode]}{" "}
+                        {/* Cuenta ítems, no actividades sueltas: cada ítem
+                            son dos días de actividades, y el número solo baja
+                            al terminarlo entero. */}
+                        {pendientesPorModo[mode] === 1
+                          ? "ítem pendiente"
+                          : "ítems pendientes"}
+                        {todasEnEspera ? ", en espera" : ""}
+                      </span>
+                      {esActual ? (
+                        destino !== null && (
+                          <button
+                            type="button"
+                            onClick={() => handleQuestionChange(mode, destino)}
+                            className="px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
+                          >
+                            Ver actividad pendiente
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCurrentModeIndex(MODES.indexOf(mode));
+                            if (destino !== null) handleQuestionChange(mode, destino);
+                          }}
+                          className="px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
+                        >
+                          Ir a este modo
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {/* Contenido del modo actual */}
           {currentModeData && currentModeStatus && (
@@ -1228,19 +1431,19 @@ export const ResultsDisplay = ({ userId }: Props) => {
 
               {currentModeData.level !== "BAJO" ? (
                 // Con nivel MEDIO o ALTO no se abren actividades: el programa
-                // solo escribió orientaciones para el nivel bajo. Se muestra la
-                // interpretación del instrumento y nada más.
+                // solo escribió orientaciones para el nivel bajo. Se muestra el
+                // speech de interpretación y nada más.
                 <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-white rounded-md">
                   <p className="text-gray-700 text-sm sm:text-base">
-                    {MODE_INTERPRETATIONS[currentMode][currentModeData.level]
-                      .description}
+                    {modeSpeech(currentMode, currentModeData.level)}
                   </p>
                 </div>
               ) : (
                 <div>
-                  <p className="mb-4 text-sm sm:text-base">
-                    {planIntro(MODE_LABELS[currentMode])}
+                  <p className="mb-2 text-sm sm:text-base">
+                    {modeSpeech(currentMode, currentModeData.level)}
                   </p>
+                  <p className="mb-4 text-sm sm:text-base">{PLAN_INVITACION}</p>
 
                   {(() => {
                     const progress = calculateRealProgress(currentMode);
@@ -1311,10 +1514,14 @@ export const ResultsDisplay = ({ userId }: Props) => {
             </button>
 
             <div className="text-center text-white text-xs sm:text-sm">
+              {/* El mensaje habla solo de ESTE modo. Decía "Modo completado -
+                  Puedes continuar", y con un aviso de pendientes justo encima
+                  se leía como "ya has terminado todo": es la misma señal falsa
+                  de remate que hacía creer el programa acabado. */}
               {isCurrentModeCompleted() ? (
                 <div className="mb-2">
                   <span className="text-green-400">
-                    ✓ Modo completado - Puedes continuar
+                    ✓ Este modo no tiene actividades pendientes
                   </span>
                 </div>
               ) : null}
@@ -1336,9 +1543,11 @@ export const ResultsDisplay = ({ userId }: Props) => {
           {/* Botón para repetir el test cuando todo esté completo */}
           {areAllModesCompleted() && hasRetakenTest === false && (
             <div className="mt-6 sm:mt-8 text-center">
-              <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 sm:mb-4">
-                ¡Felicitaciones! Has completado todas las actividades
-              </h3>
+              <div className="p-4 sm:p-6 bg-white rounded-lg shadow-md max-w-2xl mx-auto mb-4 sm:mb-6 space-y-3 text-gray-700 text-sm sm:text-base">
+                {SPEECH_FINALIZACION.map((parrafo, i) => (
+                  <p key={i}>{parrafo}</p>
+                ))}
+              </div>
 
               {/* Sin espera: terminar las actividades es la condición, y
                   acaba de cumplirla. */}
