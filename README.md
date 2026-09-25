@@ -113,6 +113,38 @@ completa y no se abre el modal— y hay una prueba que fija que **solo** el íte
 está en ese caso, para que si algún día se añaden, avise en lugar de pasar en
 silencio.
 
+### Sonidos, celebraciones y medalla
+
+Cada logro suena distinto, para que se distinga el avance diario del final:
+
+| Momento | Sonido |
+| --- | --- |
+| Resultados con algún modo BAJO | Alarma (`alerta.mp3`) |
+| Una actividad suelta | Campanita generada en el navegador |
+| Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |
+| Enviar la retroalimentación | Campana de victoria (`campana-de-victoria.mp3`) |
+| Medalla del segundo intento | Subida de nivel y, después, fanfarria |
+| Leyendo los resultados | Música de fondo en bucle, con botón para pausarla |
+
+Los archivos están en `public/sonidos/` y salen de Pixabay (licencia libre, sin
+atribución obligatoria). La alarma y la ovación están recortadas a unos
+segundos; los originales duran 23 y 30.
+
+La **medalla** aparece en los resultados del segundo intento por cada modo que
+salió BAJO en el primero y ya no. Se compara contra `answers`, no contra
+`testResults`.
+
+La alarma y la medalla suenan **solo la primera vez** que se muestran los
+resultados de un intento, que es justo al terminar el test, y la música de
+fondo no empieza hasta que terminan: nunca suenan a la vez. Al recargar
+`/results` no se repiten, y el navegador tampoco dejaría que la música arranque
+sola: se queda esperando a que se pulse su botón.
+
+En el cuadro de **Orientaciones** aparecen los tres modos con su
+interpretación. Los modos BAJOS llevan el botón *Seguir orientaciones*, que abre
+la actividad pendiente. Los MEDIOS y ALTOS llevan *¡Felicitaciones!*, que lanza
+confeti y muestra *¡Muy bien!*.
+
 ## Los dos intentos del test
 
 Cada participante puede hacer el test **dos veces como máximo**, y el segundo
@@ -372,7 +404,7 @@ src/
 │   ├── celebracion.ts             # Confeti al completar actividades
 │   ├── firebase/                  # config.ts (cliente) y admin.ts (servidor)
 │   ├── scoring.ts                 # Puntuación y apertura de actividades
-│   ├── sonido.ts                  # Campanita que acompaña al confeti
+│   ├── sonido.ts                  # Efectos de sonido y música de fondo
 │   ├── testAccess.ts              # Quién puede hacer el test
 │   └── terms.ts                   # Consentimiento informado
 ├── middleware.ts

@@ -16,6 +16,7 @@ import {
   type TotalScore,
 } from "@/lib/scoring";
 import {
+  MODE_INTERPRETATIONS,
   modeSpeech,
   PLAN_INVITACION,
   SPEECH_FINALIZACION,
@@ -28,13 +29,19 @@ import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { useRouter } from "next/navigation";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { Medal } from "lucide-react";
 import PsychologicalProfile from "./PsychologicalProfile";
+import MusicaDeFondo from "./MusicaDeFondo";
 import {
   celebrarActividad,
   celebrarDia,
+  celebrarFelicitacion,
+  celebrarMedalla,
   celebrarRecomendacion,
   celebrarPrograma,
+  celebrarRetroalimentacion,
 } from "@/lib/celebracion";
+import { reproducirEfecto, sonarAlEntrar } from "@/lib/sonido";
 
 interface Props {
   userId: string;
@@ -483,6 +490,17 @@ export const ResultsDisplay = ({ userId }: Props) => {
   // propio cuadro y marca las preguntas que faltan.
   const [faltanRespuestas, setFaltanRespuestas] = useState(false);
   const [currentModeIndex, setCurrentModeIndex] = useState(0);
+  // Modos que salieron BAJO en el primer intento y ya no en el segundo. Cada
+  // uno gana una medalla: es el efecto que el plan de actividades perseguía.
+  const [modosSuperados, setModosSuperados] = useState<
+    Array<{ mode: Mode; antes: Level; ahora: Level }>
+  >([]);
+  // Modos medio o alto en los que ya se pulsó "¡Felicitaciones!", para
+  // mostrar al lado el "¡Muy bien!".
+  const [felicitados, setFelicitados] = useState<Record<string, boolean>>({});
+  // Tarjeta del modo actual, para llevar la vista hasta ella desde el cuadro
+  // de orientaciones.
+  const tarjetaDelModoRef = useRef<HTMLDivElement>(null);
 
   // Temporizadores activos
   const activeTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -856,6 +874,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
       } catch (error) {
         console.error("Error saving activity feedback:", error);
       }
+      celebrarRetroalimentacion();
       setShowFeedbackModal(false);
       setCurrentFeedbackRec(null);
       setFeedbackAnswers({});
@@ -901,8 +920,40 @@ export const ResultsDisplay = ({ userId }: Props) => {
           ? userData?.testResults2
           : userData?.testResults;
 
+        // Medalla por cada modo que dejó el nivel bajo entre un intento y
+        // otro. Se compara con las respuestas del primer intento, que son la
+        // fuente; los testResults guardados podrían no existir.
+        const superados =
+          isRetake && userData?.answers
+            ? (() => {
+                const anteriores = calculateResults(userData.answers as Answers);
+                return MODES.filter(
+                  (mode) =>
+                    anteriores[mode].level === "BAJO" &&
+                    calculatedResults[mode].level !== "BAJO"
+                ).map((mode) => ({
+                  mode,
+                  antes: anteriores[mode].level,
+                  ahora: calculatedResults[mode].level,
+                }));
+              })()
+            : [];
+        setModosSuperados(superados);
+
         if (!existingResults) {
           await saveResultsToFirebase(calculatedResults, calculatedTotal);
+
+          // Sonidos de la primera vez que se muestran estos resultados, que es
+          // justo al terminar el test: al recargar ya no se repiten. La
+          // medalla va primero; si hay medalla no suena además la alerta, que
+          // la taparía. La música de fondo arranca cuando terminan.
+          if (superados.length > 0) {
+            celebrarMedalla();
+          } else if (
+            MODES.some((mode) => calculatedResults[mode].level === "BAJO")
+          ) {
+            sonarAlEntrar(reproducirEfecto("alerta"));
+          }
         }
 
         const savedRecommendationProgress =
@@ -1106,21 +1157,10 @@ export const ResultsDisplay = ({ userId }: Props) => {
     return pendientes;
   }, [results, recommendationStatus, userTestAnswers]);
 
-  // Modos con trabajo pendiente, incluido el que se está viendo. Los otros
-  // cubren el caso de quien llega al último modo, lo ve sin actividades porque
-  // le salió ALTO, y da por terminado el programa cuando le quedan actividades
-  // en los modos por los que ya pasó. El actual cubre el de quien termina el
-  // último ítem de un modo y cree acabado el modo entero, sin pulsar
-  // "Anterior", donde todavía le quedan.
-  const modosPendientes = useMemo(
-    () => MODES.filter((mode) => pendientesPorModo[mode] > 0),
-    [pendientesPorModo]
-  );
-
-  // Adónde llevan los botones del aviso en cada modo. Una actividad pendiente
+  // Adónde lleva "Seguir orientaciones" en cada modo. Una actividad pendiente
   // puede estar DISPONIBLE o EN ESPERA de las 12 horas que separan un día del
   // siguiente. Mandar a la persona a una en espera la deja sin nada que hacer,
-  // así que los botones saltan a la siguiente disponible:
+  // así que el botón salta a la siguiente disponible:
   //
   //   · `destino`: ítem al que saltar, buscando hacia delante desde el que se
   //     ve y volviendo al principio al llegar al final, para que pulsar varias
@@ -1220,6 +1260,30 @@ export const ResultsDisplay = ({ userId }: Props) => {
     return info;
   }, [results, recommendationStatus, userTestAnswers, pendientesPorModo]);
 
+  // Botón "Seguir orientaciones" de un modo bajo: abre ese modo en la
+  // actividad pendiente que se puede hacer ya, y lleva la vista hasta ella.
+  const seguirOrientaciones = useCallback(
+    (mode: Mode) => {
+      setCurrentModeIndex(MODES.indexOf(mode));
+      const { destino } = navegacionPendientes[mode];
+      if (destino !== null) handleQuestionChange(mode, destino);
+      // En el siguiente cuadro, cuando ya se ha pintado el modo elegido.
+      requestAnimationFrame(() =>
+        tarjetaDelModoRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      );
+    },
+    [navegacionPendientes, handleQuestionChange]
+  );
+
+  // Botón "¡Felicitaciones!" de un modo medio o alto.
+  const felicitar = useCallback((mode: Mode) => {
+    celebrarFelicitacion();
+    setFelicitados((prev) => ({ ...prev, [mode]: true }));
+  }, []);
+
   // ¿Están completas todas las actividades de todos los modos?
   const areAllModesCompleted = useCallback(() => {
     return MODES.every((mode) => {
@@ -1308,7 +1372,9 @@ export const ResultsDisplay = ({ userId }: Props) => {
   }
 
   return (
-    <div className="w-full px-2 sm:px-4">
+    // pb-20: margen para el botón flotante de la música, que si no tapa los
+    // últimos botones de la pantalla en el celular.
+    <div className="w-full px-2 sm:px-4 pb-20">
       <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-white">
         Resultados: modos de afrontamiento a la tensión académica
       </h1>
@@ -1320,6 +1386,34 @@ export const ResultsDisplay = ({ userId }: Props) => {
           &nbsp;&nbsp;({total.score} de {total.max})
         </span>
       </div>
+
+      <MusicaDeFondo />
+
+      {/* Medalla del segundo intento: un modo que salió bajo en el primero y
+          ya no. Se queda a la vista en cada visita; el sonido y el confeti,
+          solo la primera vez. */}
+      {modosSuperados.length > 0 && (
+        <div className="mb-4 sm:mb-6 rounded-xl border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-100 p-4 sm:p-6 shadow-lg text-center">
+          <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 shadow-md ring-4 ring-yellow-200">
+            <Medal size={44} className="text-white" aria-hidden="true" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-amber-900 mb-2">
+            ¡Medalla de logro!
+          </h2>
+          <ul className="space-y-1 text-amber-900 text-sm sm:text-base">
+            {modosSuperados.map(({ mode, antes, ahora }) => (
+              <li key={mode}>
+                Superaste el nivel bajo en el modo{" "}
+                <strong>{MODE_LABELS[mode].toLowerCase()}</strong>: pasaste de{" "}
+                {antes} a {ahora}.
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-amber-800 text-sm sm:text-base">
+            Tu esfuerzo con las actividades dio resultado. ¡Sigue así!
+          </p>
+        </div>
+      )}
 
       <PsychologicalProfile
         results={results}
@@ -1396,72 +1490,109 @@ export const ResultsDisplay = ({ userId }: Props) => {
             </p>
           </div>
 
-          {/* Aviso de trabajo pendiente. No dice "revise las pestañas
-              anteriores": dice en qué modos y cuántas actividades quedan, y
-              lleva hasta allí. La pantalla ya tiene ese dato. */}
-          {modosPendientes.length > 0 && (
-            <div className="mb-4 sm:mb-6 bg-amber-100 border-l-4 border-amber-500 rounded-lg p-3 sm:p-4">
-              <p className="font-bold text-amber-900 text-sm sm:text-base">
-                Todavía te quedan actividades por hacer
-              </p>
-              <ul className="mt-2 space-y-2">
-                {modosPendientes.map((mode) => {
-                  const esActual = mode === currentMode;
-                  const { destino, todasEnEspera, proximoDesbloqueo } =
-                    navegacionPendientes[mode];
-                  return (
-                    <li
-                      key={mode}
-                      className="flex flex-wrap items-center justify-between gap-2"
-                    >
-                      <span className="text-amber-900 text-sm sm:text-base">
-                        <strong>{MODE_LABELS[mode]}</strong>
-                        {esActual ? " (estás aquí)" : ""}:{" "}
-                        {pendientesPorModo[mode]}{" "}
-                        {/* Cuenta ítems, no actividades sueltas: cada ítem
-                            son dos días de actividades, y el número solo baja
-                            al terminarlo entero. */}
-                        {pendientesPorModo[mode] === 1
-                          ? "ítem pendiente"
-                          : "ítems pendientes"}
-                        {todasEnEspera && proximoDesbloqueo
-                          ? `. El próximo se desbloquea a las ${formatearDesbloqueo(
-                              proximoDesbloqueo
-                            )}`
-                          : ""}
+          {/* Cuadro de orientaciones, con los tres modos y su
+              interpretación. Los modos bajos llevan a sus actividades con
+              "Seguir orientaciones"; los medios y altos no tienen actividades,
+              y en su lugar hay un "¡Felicitaciones!" que celebra al pulsarlo.
+              Sustituye al aviso "Todavía te quedan actividades por hacer",
+              que solo nombraba los modos con pendientes y los contaba. */}
+          <div className="mb-4 sm:mb-6 bg-white rounded-lg shadow-md p-3 sm:p-5">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-3">
+              Orientaciones
+            </h3>
+            <ul className="space-y-3">
+              {MODES.map((mode) => {
+                const { level } = results[mode];
+                const nombre = MODE_LABELS[mode].toLowerCase();
+                const esBajo = level === "BAJO";
+                const pendientes = pendientesPorModo[mode] ?? 0;
+                const { todasEnEspera, proximoDesbloqueo } =
+                  navegacionPendientes[mode];
+                return (
+                  <li
+                    key={mode}
+                    className={`rounded-md border-l-4 p-3 ${
+                      esBajo
+                        ? "border-red-500 bg-red-50"
+                        : level === "MEDIO"
+                          ? "border-yellow-500 bg-yellow-50"
+                          : "border-green-500 bg-green-50"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <strong className="text-gray-900 text-sm sm:text-base">
+                        Modo {nombre}
+                      </strong>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLevelClass(
+                          level
+                        )}`}
+                      >
+                        {level}
                       </span>
-                      {esActual ? (
-                        destino !== null && (
+                    </div>
+                    <p className="text-gray-700 text-sm sm:text-base">
+                      {MODE_INTERPRETATIONS[mode][level].description}
+                    </p>
+
+                    {esBajo ? (
+                      pendientes > 0 ? (
+                        <>
+                          <p className="mt-2 text-gray-800 text-sm sm:text-base">
+                            Para mejorar el modo {nombre} debes presionar{" "}
+                            <strong>Seguir orientaciones</strong> y cumplir con
+                            las actividades programadas. Si cumples con todas
+                            verás una mejora notable en el modo {nombre}.
+                          </p>
+                          {todasEnEspera && proximoDesbloqueo && (
+                            <p className="mt-1 text-gray-600 text-xs sm:text-sm">
+                              La próxima actividad se desbloquea a las{" "}
+                              {formatearDesbloqueo(proximoDesbloqueo)}.
+                            </p>
+                          )}
                           <button
                             type="button"
-                            onClick={() => handleQuestionChange(mode, destino)}
-                            className="px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
+                            onClick={() => seguirOrientaciones(mode)}
+                            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-medium"
                           >
-                            {todasEnEspera ? "Ver ese ítem" : "Ver actividad pendiente"}
+                            Seguir orientaciones
                           </button>
-                        )
+                        </>
                       ) : (
+                        <p className="mt-2 text-green-700 text-sm sm:text-base font-medium">
+                          ✓ Completaste todas las actividades de este modo.
+                        </p>
+                      )
+                    ) : (
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => {
-                            setCurrentModeIndex(MODES.indexOf(mode));
-                            if (destino !== null) handleQuestionChange(mode, destino);
-                          }}
-                          className="px-3 py-1 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-xs sm:text-sm font-medium"
+                          onClick={() => felicitar(mode)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
                         >
-                          Ir a este modo
+                          ¡Felicitaciones!
                         </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
+                        {felicitados[mode] && (
+                          <span
+                            role="status"
+                            className="text-green-700 font-bold text-base sm:text-lg"
+                          >
+                            ¡Muy bien!
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
           {/* Contenido del modo actual */}
           {currentModeData && currentModeStatus && (
-            <div className="bg-celeste p-4 sm:p-6 rounded-lg shadow-lg w-full mb-4 sm:mb-6">
+            <div
+              ref={tarjetaDelModoRef}
+              className="bg-celeste p-4 sm:p-6 rounded-lg shadow-lg w-full mb-4 sm:mb-6 scroll-mt-4"
+            >
               <h3 className="text-lg sm:text-xl mb-3 sm:mb-4">
                 Modo de afrontamiento {MODE_LABELS[currentMode].toLowerCase()}
               </h3>
