@@ -404,7 +404,7 @@ const DayActivitiesRenderer = memo<DayActivitiesProps>((props) => {
           <OptimizedButton
             onClick={() => onCompleteActivity(modeKey, recommendation.id)}
             disabled={completarBloqueado}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm sm:text-base disabled:opacity-60 disabled:cursor-wait"
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm sm:text-base disabled:opacity-60 disabled:hover:bg-green-600"
           >
             {isLastActivityOfDay
               ? "Culminar Día"
