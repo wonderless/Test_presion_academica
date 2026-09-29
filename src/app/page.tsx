@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { hasAcceptedTerms, setTermsAccepted } from "@/lib/terms";
+import { reproducirEfecto } from "@/lib/sonido";
 
 export default function ConsentPage() {
   // Arranca marcada si la persona ya aceptó antes: al volver a "/" no tiene
@@ -20,6 +21,9 @@ export default function ConsentPage() {
   const handleConsent = () => {
     if (isChecked) {
       setTermsAccepted(true);
+      // La navegación a /home no recarga la página, así que el sonido sigue
+      // sonando mientras se abre la siguiente pantalla.
+      void reproducirEfecto("bienvenida");
       router.push('/home');
     } else {
       // Mostrar un mensaje si intentan continuar sin marcar la casilla

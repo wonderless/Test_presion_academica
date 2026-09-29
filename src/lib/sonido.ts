@@ -1,5 +1,7 @@
 // src/lib/sonido.ts
-// Sonidos de la pantalla de resultados. Hay tres familias:
+// Sonidos de la aplicación, casi todos de la pantalla de resultados. La
+// excepción es la bienvenida, al aceptar los términos en "/". Hay tres
+// familias:
 //
 //   · La campanita de una actividad suelta, generada en el navegador con la
 //     Web Audio API. Es el logro más pequeño y el más repetido: un sonido
@@ -25,6 +27,7 @@ export type EfectoDeSonido =
   | "subidaDeNivel"
   | "medalla"
   | "cierre"
+  | "bienvenida"
 
 const ARCHIVOS: Record<EfectoDeSonido, string> = {
   alerta: "/sonidos/alerta.mp3",
@@ -33,6 +36,7 @@ const ARCHIVOS: Record<EfectoDeSonido, string> = {
   subidaDeNivel: "/sonidos/subida-de-nivel.mp3",
   medalla: "/sonidos/fanfarria-medalla.mp3",
   cierre: "/sonidos/cierre.mp3",
+  bienvenida: "/sonidos/bienvenida.mp3",
 }
 
 const VOLUMEN_EFECTOS = 0.7

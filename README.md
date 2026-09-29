@@ -119,6 +119,7 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 
 | Momento | Sonido |
 | --- | --- |
+| Pulsar *Continuar* en los términos y condiciones (`/`) | Bienvenida (`bienvenida.mp3`) |
 | Resultados con algún modo BAJO | Alarma (`alerta.mp3`) |
 | Una actividad suelta | Campanita generada en el navegador |
 | Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |
@@ -127,7 +128,8 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 | Mensaje final, al terminar todas las actividades | Sonido de cierre, una vez (`cierre.mp3`) |
 
 Los archivos están en `public/sonidos/` y salen de Pixabay (licencia libre, sin
-atribución obligatoria). La alarma y la ovación están recortadas a unos
+atribución obligatoria), salvo la bienvenida y el sonido de cierre, que aportó
+el equipo. La alarma y la ovación están recortadas a unos
 segundos; los originales duran 23 y 30.
 
 La **medalla** aparece solo cuando **ningún** modo sale BAJO, y entonces hay
@@ -147,7 +149,7 @@ agradecimiento en el segundo. Suena **solo** al completar la última actividad
 durante la sesión, no al volver a entrar. Espera a que se cierre el cuadro de
 retroalimentación y a que acabe el sonido que esté en curso, para no sonar
 encima. Quien no tuvo ningún modo bajo no tiene actividades, así que no lo
-oye. A diferencia del resto, no sale de Pixabay: lo aportó el equipo.
+oye.
 
 En el cuadro de **Orientaciones** aparecen los tres modos con su
 interpretación. Los modos BAJOS llevan el botón *Seguir orientaciones*, que abre
