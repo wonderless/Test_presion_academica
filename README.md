@@ -96,6 +96,13 @@ No se muestra una cuenta atrás sino la hora absoluta de desbloqueo —*"se
 desbloqueará la actividad a las 21:30 del 8 de septiembre"*—, porque con doce
 horas por delante una cuenta atrás obliga a hacer la suma mentalmente.
 
+Durante esa espera se muestra una **frase motivacional**, del documento
+*"Frases motivacionales para el Programa"*: una de las cinco del modo de la
+actividad o una de las cinco generales. Están en
+`src/constants/frasesMotivacionales.ts`, palabra por palabra. La frase sale de
+la actividad y no del azar, así que al recargar se ve la misma. Todas invitan a
+volver "mañana", por eso solo aparecen al cerrar el día 1.
+
 Mientras un temporizador corre aparecen los botones de navegación para pasar a
 otro ítem y seguir avanzando por otro lado. Al completar los dos días se abren
 las preguntas de retroalimentación de esa recomendación.

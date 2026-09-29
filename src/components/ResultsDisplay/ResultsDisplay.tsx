@@ -43,6 +43,7 @@ import {
   celebrarRetroalimentacion,
 } from "@/lib/celebracion";
 import { reproducirEfecto, sonarCierre } from "@/lib/sonido";
+import { fraseMotivacional } from "@/constants/frasesMotivacionales";
 
 interface Props {
   userId: string;
@@ -361,6 +362,11 @@ const DayActivitiesRenderer = memo<DayActivitiesProps>((props) => {
           <p className="text-base sm:text-lg mb-3 sm:mb-4">
             Has completado todas las actividades del Día{" "}
             {diaVisible}.
+          </p>
+          {/* Frase motivacional al cerrar el día: se queda a la vista durante
+              toda la espera hasta el día siguiente. */}
+          <p className="mx-auto max-w-xl mb-4 sm:mb-6 rounded-lg bg-white/80 border border-blue-100 px-4 py-3 text-base sm:text-lg italic text-gray-800">
+            {fraseMotivacional(modeKey as Mode, recommendation.id)}
           </p>
           <p className="text-base sm:text-lg mb-4 sm:mb-6">
             Las actividades del Día {diaVisible + 1} estarán
