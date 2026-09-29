@@ -120,6 +120,7 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 | Momento | Sonido |
 | --- | --- |
 | Pulsar *Continuar* en los términos y condiciones (`/`) | Bienvenida (`bienvenida.mp3`) |
+| Empezar el test, en el primer y en el segundo intento | Bienvenida (`bienvenida.mp3`) |
 | Resultados con algún modo BAJO | Alarma (`alerta.mp3`) |
 | Una actividad suelta | Campanita generada en el navegador |
 | Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |

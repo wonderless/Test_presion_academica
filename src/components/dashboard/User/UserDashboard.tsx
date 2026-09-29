@@ -12,6 +12,7 @@ import {
   type TestUserData,
 } from "@/lib/testAccess";
 import { LogOut } from "lucide-react";
+import { reproducirEfecto } from "@/lib/sonido";
 
 const UserDashboard = () => {
   const router = useRouter();
@@ -52,8 +53,13 @@ const UserDashboard = () => {
   // Empezar el test no escribe nada en Firestore. Que este intento sea el
   // segundo lo resuelve TestForm al enviarlo, junto con las respuestas: marcar
   // aquí dejaba el intento consumido a quien abría el test y lo abandonaba.
+  //
+  // Suena la bienvenida, la misma que al aceptar los términos, en los dos
+  // intentos. La navegación a /test no recarga la página, así que el sonido
+  // sigue mientras se abre el cuestionario.
   const handleStartTest = () => {
     localStorage.setItem("testStartTime", Date.now().toString());
+    void reproducirEfecto("bienvenida");
     router.push("/test");
   };
 

@@ -1,7 +1,7 @@
 // src/lib/sonido.ts
 // Sonidos de la aplicación, casi todos de la pantalla de resultados. La
-// excepción es la bienvenida, al aceptar los términos en "/". Hay tres
-// familias:
+// excepción es la bienvenida, al aceptar los términos en "/" y al empezar el
+// test desde el panel del estudiante. Hay tres familias:
 //
 //   · La campanita de una actividad suelta, generada en el navegador con la
 //     Web Audio API. Es el logro más pequeño y el más repetido: un sonido

@@ -45,7 +45,7 @@ export default function ConsentPage() {
 
         <div className="bg-white/70 rounded-lg border border-black/10 p-4 max-h-56 overflow-y-auto text-sm text-left mb-5">
           <p>
-            El presente es un programa experimental que busca medir y orientar
+            El presente es un programa que busca medir y orientar
             tus modos de afrontamiento a la tensión académica. En el caso que
             algún modo de afronte se encuentre bajo, te orientará para que
             realices actividades que mejoren el déficit y evitar problemas
