@@ -8,8 +8,8 @@
 //
 // Cada celebración suena además (src/lib/sonido.ts): la actividad suelta, con
 // una campanita; el día culminado, la recomendación y el programa, con una
-// ovación; la retroalimentación, con una campana de victoria, y la medalla de
-// los modos medio o alto, con su propia fanfarria. El confeti no sale para quien
+// ovación; la retroalimentación, con una campana de victoria, y la medalla,
+// con su propia fanfarria. El confeti no sale para quien
 // pidió al sistema reducir el movimiento (`disableForReducedMotion`); el sonido
 // sí, porque esa preferencia es sobre el movimiento, no sobre el audio.
 //
@@ -102,14 +102,11 @@ export const celebrarFelicitacion = () => {
   ]);
 };
 
-// Al ver por primera vez unos resultados con algún modo medio o alto: la
-// medalla. Confeti dorado, más largo que el del programa, porque es el logro
-// que todo el instrumento persigue.
-//
-// Con algún modo bajo (`conModoBajo`), tras la subida de nivel suena la alarma
-// en vez de la fanfarria: ver `reproducirMedalla`.
-export const celebrarMedalla = (conModoBajo = false) => {
-  void reproducirMedalla(conModoBajo);
+// Al ver por primera vez unos resultados sin ningún modo bajo: la medalla.
+// Confeti dorado, más largo que el del programa, porque es el logro que todo
+// el instrumento persigue.
+export const celebrarMedalla = () => {
+  void reproducirMedalla();
   const dorados = ["#FFD700", "#FFC107", "#F59E0B", "#FDE68A", "#FFFFFF"];
   const fin = Date.now() + 4500;
   const rafaga = () => {

@@ -123,32 +123,31 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 | Una actividad suelta | Campanita generada en el navegador |
 | Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |
 | Enviar la retroalimentación | Campana de victoria (`campana-de-victoria.mp3`) |
-| Medalla de un modo MEDIO o ALTO | Subida de nivel, fanfarria y confeti dorado |
-| Mensaje final, al terminar todas las actividades | Música de cierre, 15 segundos (`musica-resultados.mp3`) |
+| Medalla (ningún modo BAJO) | Subida de nivel, fanfarria y confeti dorado |
+| Mensaje final, al terminar todas las actividades | Sonido de cierre, una vez (`cierre.mp3`) |
 
 Los archivos están en `public/sonidos/` y salen de Pixabay (licencia libre, sin
 atribución obligatoria). La alarma y la ovación están recortadas a unos
 segundos; los originales duran 23 y 30.
 
-La **medalla** aparece por cada modo que sale MEDIO o ALTO, en cualquiera de
-los dos intentos. En el segundo, la de un modo que salió BAJO en el primero y
-ya no lo cuenta aparte ("superaste el nivel bajo"); para saberlo se compara
-contra `answers`, no contra `testResults`. Si junto a las medallas algún modo
-sale BAJO, no suena la fanfarria: tras la subida de nivel suena directamente la
-alarma, para que el aviso de las actividades pendientes no espere.
+La **medalla** aparece solo cuando **ningún** modo sale BAJO, y entonces hay
+una por cada modo, en cualquiera de los dos intentos. Con algún modo BAJO no
+hay medalla: suena la alarma, porque lo que toca es seguir las actividades. En
+el segundo intento, la de un modo que salió BAJO en el primero y ya no lo
+cuenta aparte ("superaste el nivel bajo"); para saberlo se compara contra
+`answers`, no contra `testResults`.
 
 La alarma y la medalla suenan **solo la primera vez** que se muestran los
 resultados de un intento, que es justo al terminar el test. Al recargar
 `/results` no se repiten.
 
-La **música de cierre** acompaña la lectura del mensaje final: el de
-finalización del programa en el primer intento y el de agradecimiento en el
-segundo. Suena **solo** al completar la última actividad durante la sesión,
-unos 15 segundos (`DURACION_MUSICA_DE_CIERRE_MS`, en `src/lib/sonido.ts`) y
-bajando el volumen al final. Espera a que se cierre el cuadro de
+El **sonido de cierre** (`cierre.mp3`, 1,6 s) suena una vez al aparecer el
+mensaje final: el de finalización del programa en el primer intento y el de
+agradecimiento en el segundo. Suena **solo** al completar la última actividad
+durante la sesión, no al volver a entrar. Espera a que se cierre el cuadro de
 retroalimentación y a que acabe el sonido que esté en curso, para no sonar
-encima. Quien no tuvo ningún modo bajo no tiene actividades, así que no la
-oye. No hay botón para ponerla a mano.
+encima. Quien no tuvo ningún modo bajo no tiene actividades, así que no lo
+oye. A diferencia del resto, no sale de Pixabay: lo aportó el equipo.
 
 En el cuadro de **Orientaciones** aparecen los tres modos con su
 interpretación. Los modos BAJOS llevan el botón *Seguir orientaciones*, que abre
@@ -414,7 +413,7 @@ src/
 │   ├── celebracion.ts             # Confeti al completar actividades
 │   ├── firebase/                  # config.ts (cliente) y admin.ts (servidor)
 │   ├── scoring.ts                 # Puntuación y apertura de actividades
-│   ├── sonido.ts                  # Efectos de sonido y música de cierre
+│   ├── sonido.ts                  # Efectos de sonido
 │   ├── testAccess.ts              # Quién puede hacer el test
 │   └── terms.ts                   # Consentimiento informado
 ├── middleware.ts

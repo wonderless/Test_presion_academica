@@ -10,9 +10,8 @@
 //     fanfarria de la medalla. Son de Pixabay (licencia libre, sin atribución
 //     obligatoria); la alerta y la ovación están recortadas a unos segundos,
 //     porque los originales duran 23 y 30.
-//   · La música de cierre: unos segundos de fondo mientras se lee el mensaje
-//     final, al terminar todas las actividades. No suena en ningún otro
-//     momento.
+//   · El sonido de cierre, corto, que suena una vez al aparecer el mensaje
+//     final, al terminar todas las actividades.
 //
 // Casi todo suena después de pulsar un botón, así que el navegador lo permite.
 // Lo que suena al abrir la pantalla —la alerta y la medalla— solo lo consigue
@@ -25,6 +24,7 @@ export type EfectoDeSonido =
   | "retroalimentacion"
   | "subidaDeNivel"
   | "medalla"
+  | "cierre"
 
 const ARCHIVOS: Record<EfectoDeSonido, string> = {
   alerta: "/sonidos/alerta.mp3",
@@ -32,13 +32,10 @@ const ARCHIVOS: Record<EfectoDeSonido, string> = {
   retroalimentacion: "/sonidos/campana-de-victoria.mp3",
   subidaDeNivel: "/sonidos/subida-de-nivel.mp3",
   medalla: "/sonidos/fanfarria-medalla.mp3",
+  cierre: "/sonidos/cierre.mp3",
 }
 
 const VOLUMEN_EFECTOS = 0.7
-// El archivo de la música ya viene bajado unos 10 dB respecto del original.
-// Hace falta: Safari en iPhone ignora el `volume` de los elementos de audio, y
-// ahí la música suena siempre a volumen completo.
-const VOLUMEN_MUSICA = 0.8
 
 // ---------------------------------------------------------------------------
 // Campanita sintetizada
@@ -118,7 +115,7 @@ export const sonarCampanita = () => {
 // la ovación de un día no se pise con la campana de la retroalimentación que
 // se abre justo después.
 let efectoEnCurso: HTMLAudioElement | null = null
-// Cuándo acaba el último efecto que se pidió, para que la música de cierre
+// Cuándo acaba el último efecto que se pidió, para que el sonido de cierre
 // empiece después y no encima.
 let finDelEfecto: Promise<unknown> = Promise.resolve()
 
@@ -132,9 +129,6 @@ export const reproducirEfecto = (efecto: EfectoDeSonido): Promise<boolean> => {
     efectoEnCurso.pause()
     efectoEnCurso.dispatchEvent(new Event("cortado"))
   }
-
-  // Un efecto nuevo tiene prioridad sobre la música de cierre.
-  pararMusicaDeCierre()
 
   const audio = new Audio(ARCHIVOS[efecto])
   audio.volume = VOLUMEN_EFECTOS
@@ -157,53 +151,26 @@ export const reproducirEfecto = (efecto: EfectoDeSonido): Promise<boolean> => {
   return fin
 }
 
-// La medalla: la subida de nivel y, al acabar, la fanfarria. Si además algún
-// modo salió bajo (`conModoBajo`), tras la subida de nivel no va la fanfarria
-// sino la alarma: el aviso de que hay actividades pendientes no debe esperar
-// los 15 segundos de fanfarria.
-//
-// Si algo corta la subida de nivel, lo que va detrás ya no suena: si no,
-// llegaría tarde y cortaría a su vez lo que la interrumpió. Lo mismo pasa en
-// desarrollo, donde React carga los resultados dos veces y la segunda medalla
-// corta a la primera.
-export const reproducirMedalla = async (conModoBajo = false) => {
+// La medalla: la subida de nivel y, al acabar, la fanfarria. Si algo corta la
+// subida de nivel, la fanfarria ya no suena: si no, llegaría tarde y cortaría
+// a su vez lo que la interrumpió. Lo mismo pasa en desarrollo, donde React
+// carga los resultados dos veces y la segunda medalla corta a la primera.
+export const reproducirMedalla = async () => {
   if (await reproducirEfecto("subidaDeNivel")) {
-    await reproducirEfecto(conModoBajo ? "alerta" : "medalla")
+    await reproducirEfecto("medalla")
   }
 }
 
 // ---------------------------------------------------------------------------
-// Música de cierre
+// Sonido de cierre
 // ---------------------------------------------------------------------------
 
-// Suena solo al terminar todas las actividades, de fondo mientras se lee el
-// mensaje final: unos segundos y se apaga sola, bajando el volumen al final
-// para no cortar en seco (en iPhone, que ignora el volumen, sí corta).
-const DURACION_MUSICA_DE_CIERRE_MS = 15000
-const FUNDIDO_MS = 1500
-const PASOS_DEL_FUNDIDO = 15
-
-let musica: HTMLAudioElement | null = null
-let temporizadoresDeMusica: ReturnType<typeof setTimeout>[] = []
-// Sube cada vez que se para la música. Arrancarla tarda (`play()` es
-// asíncrono), y si mientras tanto se pidió pararla —la persona salió de la
-// pantalla o empezó otro efecto—, al acabar de arrancar tiene que enterarse.
-let turnoDeMusica = 0
-
-export const pararMusicaDeCierre = () => {
-  turnoDeMusica++
-  temporizadoresDeMusica.forEach(clearTimeout)
-  temporizadoresDeMusica = []
-  if (musica) {
-    musica.pause()
-    musica.currentTime = 0
-  }
-}
-
-// Espera a que acabe el efecto en curso —la ovación del programa o la campana
-// de la retroalimentación— y a los que se encadenen detrás. `cancelada` deja
-// saber si mientras tanto la persona salió de la pantalla.
-export const sonarMusicaDeCierre = async (cancelada?: () => boolean) => {
+// Suena una vez al terminar todas las actividades, cuando aparece el mensaje
+// final. Espera a que acabe el efecto en curso —la ovación del programa o la
+// campana de la retroalimentación— y a los que se encadenen detrás, para no
+// cortarlos. `cancelada` deja saber si mientras tanto la persona salió de la
+// pantalla: entonces ya no suena.
+export const sonarCierre = async (cancelada?: () => boolean) => {
   if (typeof window === "undefined") return
   let esperado: Promise<unknown>
   do {
@@ -211,32 +178,5 @@ export const sonarMusicaDeCierre = async (cancelada?: () => boolean) => {
     await esperado
   } while (esperado !== finDelEfecto)
   if (cancelada?.()) return
-
-  pararMusicaDeCierre()
-  if (!musica) musica = new Audio("/sonidos/musica-resultados.mp3")
-  const audio = musica
-  audio.volume = VOLUMEN_MUSICA
-  const turno = turnoDeMusica
-  try {
-    await audio.play()
-  } catch {
-    // El navegador no la dejó sonar: el mensaje se lee igual.
-    return
-  }
-  if (turno !== turnoDeMusica || cancelada?.()) {
-    pararMusicaDeCierre()
-    return
-  }
-
-  const inicioDelFundido = DURACION_MUSICA_DE_CIERRE_MS - FUNDIDO_MS
-  for (let paso = 1; paso <= PASOS_DEL_FUNDIDO; paso++) {
-    temporizadoresDeMusica.push(
-      setTimeout(() => {
-        audio.volume = VOLUMEN_MUSICA * (1 - paso / PASOS_DEL_FUNDIDO)
-      }, inicioDelFundido + (FUNDIDO_MS * paso) / PASOS_DEL_FUNDIDO)
-    )
-  }
-  temporizadoresDeMusica.push(
-    setTimeout(pararMusicaDeCierre, DURACION_MUSICA_DE_CIERRE_MS)
-  )
+  await reproducirEfecto("cierre")
 }

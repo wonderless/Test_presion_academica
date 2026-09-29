@@ -42,11 +42,7 @@ import {
   celebrarPrograma,
   celebrarRetroalimentacion,
 } from "@/lib/celebracion";
-import {
-  pararMusicaDeCierre,
-  reproducirEfecto,
-  sonarMusicaDeCierre,
-} from "@/lib/sonido";
+import { reproducirEfecto, sonarCierre } from "@/lib/sonido";
 
 interface Props {
   userId: string;
@@ -528,9 +524,10 @@ export const ResultsDisplay = ({ userId }: Props) => {
   // propio cuadro y marca las preguntas que faltan.
   const [faltanRespuestas, setFaltanRespuestas] = useState(false);
   const [currentModeIndex, setCurrentModeIndex] = useState(0);
-  // Una medalla por cada modo que salió MEDIO o ALTO, en cualquier intento.
-  // `antes` solo viene cuando ese modo salió BAJO en el primer intento y ya
-  // no: es el efecto que el plan de actividades perseguía, y se cuenta aparte.
+  // Una medalla por cada modo, en cualquier intento, pero solo si ninguno de
+  // los tres salió BAJO. `antes` solo viene cuando ese modo salió BAJO en el
+  // primer intento y ya no: es el efecto que el plan de actividades
+  // perseguía, y se cuenta aparte.
   const [medallas, setMedallas] = useState<
     Array<{ mode: Mode; ahora: Level; antes?: Level }>
   >([]);
@@ -985,17 +982,19 @@ export const ResultsDisplay = ({ userId }: Props) => {
           ? userData?.testResults2
           : userData?.testResults;
 
-        // Medalla por cada modo que salió medio o alto. En el segundo intento
-        // se marca además cuál dejó el nivel bajo, comparando con las
-        // respuestas del primero, que son la fuente; los testResults guardados
-        // podrían no existir.
+        // Medallas: solo si ningún modo salió bajo, y entonces una por cada
+        // modo. Con alguno bajo lo que toca es el aviso de las actividades, no
+        // la celebración. En el segundo intento se marca además cuál dejó el
+        // nivel bajo, comparando con las respuestas del primero, que son la
+        // fuente; los testResults guardados podrían no existir.
+        const hayModoBajo = MODES.some(
+          (mode) => calculatedResults[mode].level === "BAJO"
+        );
         const anteriores =
           isRetake && userData?.answers
             ? calculateResults(userData.answers as Answers)
             : null;
-        const nuevasMedallas = MODES.filter(
-          (mode) => calculatedResults[mode].level !== "BAJO"
-        ).map((mode) => ({
+        const nuevasMedallas = (hayModoBajo ? [] : MODES).map((mode) => ({
           mode,
           ahora: calculatedResults[mode].level,
           antes:
@@ -1009,14 +1008,10 @@ export const ResultsDisplay = ({ userId }: Props) => {
           await saveResultsToFirebase(calculatedResults, calculatedTotal);
 
           // Sonidos de la primera vez que se muestran estos resultados, que es
-          // justo al terminar el test: al recargar ya no se repiten. La
-          // medalla va primero y, si además hay algún modo bajo, tras la
-          // subida de nivel suena la alerta en lugar de la fanfarria.
-          const hayModoBajo = MODES.some(
-            (mode) => calculatedResults[mode].level === "BAJO"
-          );
+          // justo al terminar el test: al recargar ya no se repiten. O la
+          // medalla, o la alarma: nunca las dos.
           if (nuevasMedallas.length > 0) {
-            celebrarMedalla(hayModoBajo);
+            celebrarMedalla();
           } else if (hayModoBajo) {
             void reproducirEfecto("alerta");
           }
@@ -1389,16 +1384,15 @@ export const ResultsDisplay = ({ userId }: Props) => {
     !!results && Object.keys(recommendationStatus).length > 0;
   const programaCompleto = progresoCargado && areAllModesCompleted();
   const programaCompletoAntes = useRef<boolean | null>(null);
-  // Música de cierre pendiente de sonar: ver el efecto de más abajo.
-  const [musicaDeCierrePendiente, setMusicaDeCierrePendiente] = useState(false);
-  // Si la persona sale de la pantalla, la música de cierre no debe arrancar
-  // ni seguir sonando.
+  // Sonido de cierre pendiente de sonar: ver el efecto de más abajo.
+  const [cierrePendiente, setCierrePendiente] = useState(false);
+  // Si la persona sale de la pantalla mientras el sonido de cierre espera su
+  // turno, ya no debe sonar.
   const montado = useRef(true);
   useEffect(() => {
     montado.current = true;
     return () => {
       montado.current = false;
-      pararMusicaDeCierre();
     };
   }, []);
   useEffect(() => {
@@ -1407,20 +1401,20 @@ export const ResultsDisplay = ({ userId }: Props) => {
     programaCompletoAntes.current = programaCompleto;
     if (antes === false && programaCompleto) {
       celebrarPrograma();
-      setMusicaDeCierrePendiente(true);
+      setCierrePendiente(true);
     }
   }, [programaCompleto, progresoCargado]);
 
-  // Música de cierre: unos segundos de fondo mientras se lee el mensaje final.
-  // Se completa el programa en esta sesión, así que solo suena una vez, y no
-  // al volver a entrar. Si la última actividad abre la retroalimentación, el
-  // mensaje queda detrás del cuadro: la música espera a que se cierre, y a que
-  // acabe la campana que suena al enviarla.
+  // Sonido de cierre: suena una vez al aparecer el mensaje final. Se completa
+  // el programa en esta sesión, así que no se repite al volver a entrar. Si la
+  // última actividad abre la retroalimentación, el mensaje queda detrás del
+  // cuadro: el sonido espera a que se cierre, y a que acabe la campana que
+  // suena al enviarla.
   useEffect(() => {
-    if (!musicaDeCierrePendiente || showFeedbackModal) return;
-    setMusicaDeCierrePendiente(false);
-    void sonarMusicaDeCierre(() => !montado.current);
-  }, [musicaDeCierrePendiente, showFeedbackModal]);
+    if (!cierrePendiente || showFeedbackModal) return;
+    setCierrePendiente(false);
+    void sonarCierre(() => !montado.current);
+  }, [cierrePendiente, showFeedbackModal]);
 
   const isCurrentModeCompleted = useCallback(() => {
     if (!currentModeData || !currentModeStatus) return false;
@@ -1483,8 +1477,8 @@ export const ResultsDisplay = ({ userId }: Props) => {
         </span>
       </div>
 
-      {/* Medallas: una por cada modo medio o alto. Se quedan a la vista en
-          cada visita; el sonido y el confeti, solo la primera vez. */}
+      {/* Medallas: una por cada modo, solo si ninguno salió bajo. Se quedan a
+          la vista en cada visita; el sonido y el confeti, solo la primera vez. */}
       {medallas.length > 0 && (
         <div className="mb-4 sm:mb-6 rounded-xl border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-100 p-4 sm:p-6 shadow-lg text-center">
           <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 shadow-md ring-4 ring-yellow-200">
