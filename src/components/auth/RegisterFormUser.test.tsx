@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import RegisterForm, { DEFAULT_INVITATION_CODE } from "./RegisterFormUser";
+import RegisterForm, {
+  DEFAULT_INVITATION_CODE,
+  normalizarCelular,
+} from "./RegisterFormUser";
 
 const simulado = vi.hoisted(() => ({
   registerUser: vi.fn(async () => ({})),
@@ -113,5 +116,55 @@ describe("RegisterFormUser", () => {
         departamento: "Lima",
       }
     );
+  });
+
+  const completarDatosPersonales = () => {
+    escribir("Nombres", "Ana");
+    escribir("Apellidos", "Pérez");
+    escribir("Edad", "21");
+    escribir("Sexo", "Mujer");
+    escribir("Universidad", "Universidad de Prueba");
+    escribir("Carrera", "Psicología");
+    escribir("Ciclo", "5");
+    escribir("Departamento", "Lima");
+  };
+
+  it("guarda el celular opcional normalizado a 9 dígitos", async () => {
+    render(<RegisterForm />);
+    completarPaso1();
+    completarDatosPersonales();
+    escribir("Celular (opcional)", "+51 987-654-321");
+    fireEvent.click(screen.getByRole("button", { name: "Registrarse" }));
+
+    await waitFor(() => expect(simulado.registerUser).toHaveBeenCalledTimes(1));
+    expect(simulado.registerUser).toHaveBeenCalledWith(
+      "persona@correo.test",
+      "clave-segura",
+      DEFAULT_INVITATION_CODE,
+      expect.objectContaining({ celular: "987654321" })
+    );
+  });
+
+  it("no registra con un celular mal escrito", () => {
+    render(<RegisterForm />);
+    completarPaso1();
+    completarDatosPersonales();
+    escribir("Celular (opcional)", "12345");
+    fireEvent.click(screen.getByRole("button", { name: "Registrarse" }));
+
+    expect(
+      screen.getByText("El celular debe tener 9 dígitos y empezar por 9")
+    ).toBeTruthy();
+    expect(simulado.registerUser).not.toHaveBeenCalled();
+  });
+
+  it("reconoce los formatos de celular peruano", () => {
+    expect(normalizarCelular("987654321")).toBe("987654321");
+    expect(normalizarCelular("987 654 321")).toBe("987654321");
+    expect(normalizarCelular("+51987654321")).toBe("987654321");
+    expect(normalizarCelular("51 987 654 321")).toBe("987654321");
+    expect(normalizarCelular("887654321")).toBeNull();
+    expect(normalizarCelular("98765432")).toBeNull();
+    expect(normalizarCelular("abc")).toBeNull();
   });
 });

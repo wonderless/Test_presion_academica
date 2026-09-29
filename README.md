@@ -123,22 +123,32 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 | Una actividad suelta | Campanita generada en el navegador |
 | Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |
 | Enviar la retroalimentación | Campana de victoria (`campana-de-victoria.mp3`) |
-| Medalla del segundo intento | Subida de nivel y, después, fanfarria |
-| Leyendo los resultados | Música de fondo en bucle, con botón para pausarla |
+| Medalla de un modo MEDIO o ALTO | Subida de nivel, fanfarria y confeti dorado |
+| Mensaje final, al terminar todas las actividades | Música de cierre, 15 segundos (`musica-resultados.mp3`) |
 
 Los archivos están en `public/sonidos/` y salen de Pixabay (licencia libre, sin
 atribución obligatoria). La alarma y la ovación están recortadas a unos
 segundos; los originales duran 23 y 30.
 
-La **medalla** aparece en los resultados del segundo intento por cada modo que
-salió BAJO en el primero y ya no. Se compara contra `answers`, no contra
-`testResults`.
+La **medalla** aparece por cada modo que sale MEDIO o ALTO, en cualquiera de
+los dos intentos. En el segundo, la de un modo que salió BAJO en el primero y
+ya no lo cuenta aparte ("superaste el nivel bajo"); para saberlo se compara
+contra `answers`, no contra `testResults`. Si junto a las medallas algún modo
+sale BAJO, no suena la fanfarria: tras la subida de nivel suena directamente la
+alarma, para que el aviso de las actividades pendientes no espere.
 
 La alarma y la medalla suenan **solo la primera vez** que se muestran los
-resultados de un intento, que es justo al terminar el test, y la música de
-fondo no empieza hasta que terminan: nunca suenan a la vez. Al recargar
-`/results` no se repiten, y el navegador tampoco dejaría que la música arranque
-sola: se queda esperando a que se pulse su botón.
+resultados de un intento, que es justo al terminar el test. Al recargar
+`/results` no se repiten.
+
+La **música de cierre** acompaña la lectura del mensaje final: el de
+finalización del programa en el primer intento y el de agradecimiento en el
+segundo. Suena **solo** al completar la última actividad durante la sesión,
+unos 15 segundos (`DURACION_MUSICA_DE_CIERRE_MS`, en `src/lib/sonido.ts`) y
+bajando el volumen al final. Espera a que se cierre el cuadro de
+retroalimentación y a que acabe el sonido que esté en curso, para no sonar
+encima. Quien no tuvo ningún modo bajo no tiene actividades, así que no la
+oye. No hay botón para ponerla a mano.
 
 En el cuadro de **Orientaciones** aparecen los tres modos con su
 interpretación. Los modos BAJOS llevan el botón *Seguir orientaciones*, que abre
@@ -404,7 +414,7 @@ src/
 │   ├── celebracion.ts             # Confeti al completar actividades
 │   ├── firebase/                  # config.ts (cliente) y admin.ts (servidor)
 │   ├── scoring.ts                 # Puntuación y apertura de actividades
-│   ├── sonido.ts                  # Efectos de sonido y música de fondo
+│   ├── sonido.ts                  # Efectos de sonido y música de cierre
 │   ├── testAccess.ts              # Quién puede hacer el test
 │   └── terms.ts                   # Consentimiento informado
 ├── middleware.ts
@@ -437,6 +447,15 @@ párrafo, enumeran en viñetas y cierran con otro párrafo, y aplanarlo a texto
 corrido deja la pantalla plana. Dos ejercicios —el ítem 13 y el 17— traen además
 una secuencia numerada dentro de un párrafo, con cada punto en su propia línea.
 Hay pruebas que comprueban que las viñetas y esas dos secuencias siguen ahí.
+
+**Algunos ejercicios llevan imagen**, en el campo opcional `imagen`
+(`{ src, alt, width, height }`). El archivo va en
+`public/imagenes/actividades/` con el nombre `item-NN.jpg`, y `width` y
+`height` son sus medidas reales en píxeles: no todas tienen la misma
+proporción, y así se muestran enteras, sin recortes. En el celular ocupa todo el
+ancho y en computadora como mucho 800 px, y `next/image` le manda a cada
+pantalla una versión de su tamaño. Un ejercicio sin `imagen` se muestra sin
+ninguna.
 
 **El `title` de cada recomendación es el enunciado de su ítem en
 `questions.ts`**, y hay una prueba que lo verifica. El documento del programa

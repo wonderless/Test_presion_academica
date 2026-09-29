@@ -16,6 +16,8 @@ export interface UserInfo {
         nombres: string;
         sexo: string;
         universidad: string;
+        // Opcional: solo lo tiene quien lo dio al registrarse.
+        celular?: string;
     }
     testDuration?: number;
     // Un puntaje por modo de afrontamiento, más el modo de afronte total, que

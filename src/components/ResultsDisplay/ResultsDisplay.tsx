@@ -23,15 +23,16 @@ import {
 } from "@/constants/interpretations";
 import type {
   ActivityBlock,
+  ImagenDeActividad,
   RecommendationItem,
 } from "../../constants/recommendations";
 import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import { useRouter } from "next/navigation";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import Image from "next/image";
 import { Medal } from "lucide-react";
 import PsychologicalProfile from "./PsychologicalProfile";
-import MusicaDeFondo from "./MusicaDeFondo";
 import {
   celebrarActividad,
   celebrarDia,
@@ -41,7 +42,11 @@ import {
   celebrarPrograma,
   celebrarRetroalimentacion,
 } from "@/lib/celebracion";
-import { reproducirEfecto, sonarAlEntrar } from "@/lib/sonido";
+import {
+  pararMusicaDeCierre,
+  reproducirEfecto,
+  sonarMusicaDeCierre,
+} from "@/lib/sonido";
 
 interface Props {
   userId: string;
@@ -67,6 +72,10 @@ const leerRetardoDeDesbloqueo = (): number => {
 };
 
 const UNLOCK_DELAY_SECONDS = leerRetardoDeDesbloqueo();
+
+// Tiempo durante el que se ignora un segundo clic en "Marcar Actividad
+// Completada" o "Culminar Día": ver `ultimaActividadCompletada`.
+const MARGEN_DOBLE_CLIC_MS = 800;
 
 interface ActivityProgress {
   currentDay: number;
@@ -282,11 +291,31 @@ const CuerpoDeActividad = memo<{ cuerpo: ActivityBlock[] }>(({ cuerpo }) => (
 ));
 CuerpoDeActividad.displayName = "CuerpoDeActividad";
 
+// Imagen de un ejercicio, con la proporción de su archivo. Ocupa todo el ancho de la tarjeta en el
+// celular y como mucho 800 px en computadora: a todo el ancho de una pantalla
+// grande mediría unos 700 px de alto y empujaría el ejercicio fuera de la
+// vista. `sizes` le dice a Next qué versión bajar en cada pantalla, así que el
+// celular no descarga el archivo grande.
+const ImagenDelEjercicio = memo<{ imagen: ImagenDeActividad }>(({ imagen }) => (
+  <Image
+    src={imagen.src}
+    alt={imagen.alt}
+    width={imagen.width}
+    height={imagen.height}
+    sizes="(max-width: 860px) 100vw, 800px"
+    className="w-full max-w-[800px] h-auto mx-auto mb-4 rounded-lg shadow-sm"
+  />
+));
+ImagenDelEjercicio.displayName = "ImagenDelEjercicio";
+
 interface DayActivitiesProps extends NavegacionProps {
   recommendation: RecommendationItem;
   currentProgress: ActivityProgress;
   onCompleteActivity: (modeKey: string, recommendationId: string) => void;
   onCountdownComplete: (modeKey: string, recommendationId: string) => void;
+  // Recién completada una actividad: el botón se desactiva un instante para
+  // que un doble clic no complete también la siguiente.
+  completarBloqueado: boolean;
 }
 
 // Actividades del día en curso, o la espera hasta que se abra el siguiente.
@@ -300,6 +329,7 @@ const DayActivitiesRenderer = memo<DayActivitiesProps>((props) => {
     onQuestionChange,
     onCompleteActivity,
     onCountdownComplete,
+    completarBloqueado,
   } = props;
 
   // El día se clampea al rango real del plan. Si por lo que sea el progreso
@@ -318,6 +348,7 @@ const DayActivitiesRenderer = memo<DayActivitiesProps>((props) => {
     currentDay.activities.length - 1
   );
   const currentActivity = currentDay.activities[indiceActividad];
+  const imagenDelEjercicio = currentActivity?.imagen;
   const isLastActivityOfDay =
     indiceActividad === currentDay.activities.length - 1;
   const hasCountdown =
@@ -370,10 +401,14 @@ const DayActivitiesRenderer = memo<DayActivitiesProps>((props) => {
             {currentActivity.title}
           </h4>
           <CuerpoDeActividad cuerpo={currentActivity.cuerpo} />
+          {imagenDelEjercicio && (
+            <ImagenDelEjercicio imagen={imagenDelEjercicio} />
+          )}
 
           <OptimizedButton
             onClick={() => onCompleteActivity(modeKey, recommendation.id)}
-            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm sm:text-base"
+            disabled={completarBloqueado}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm sm:text-base disabled:opacity-60 disabled:cursor-wait"
           >
             {isLastActivityOfDay
               ? "Culminar Día"
@@ -414,6 +449,9 @@ interface RecommendationDisplayProps extends NavegacionProps {
   currentProgress?: ActivityProgress;
   onCompleteActivity: (modeKey: string, recommendationId: string) => void;
   onCountdownComplete: (modeKey: string, recommendationId: string) => void;
+  // Recién completada una actividad: el botón se desactiva un instante para
+  // que un doble clic no complete también la siguiente.
+  completarBloqueado: boolean;
 }
 
 const RecommendationDisplay = memo<RecommendationDisplayProps>((props) => {
@@ -490,14 +528,26 @@ export const ResultsDisplay = ({ userId }: Props) => {
   // propio cuadro y marca las preguntas que faltan.
   const [faltanRespuestas, setFaltanRespuestas] = useState(false);
   const [currentModeIndex, setCurrentModeIndex] = useState(0);
-  // Modos que salieron BAJO en el primer intento y ya no en el segundo. Cada
-  // uno gana una medalla: es el efecto que el plan de actividades perseguía.
-  const [modosSuperados, setModosSuperados] = useState<
-    Array<{ mode: Mode; antes: Level; ahora: Level }>
+  // Una medalla por cada modo que salió MEDIO o ALTO, en cualquier intento.
+  // `antes` solo viene cuando ese modo salió BAJO en el primer intento y ya
+  // no: es el efecto que el plan de actividades perseguía, y se cuenta aparte.
+  const [medallas, setMedallas] = useState<
+    Array<{ mode: Mode; ahora: Level; antes?: Level }>
   >([]);
   // Modos medio o alto en los que ya se pulsó "¡Felicitaciones!", para
   // mostrar al lado el "¡Muy bien!".
   const [felicitados, setFelicitados] = useState<Record<string, boolean>>({});
+  // Cuándo se completó la última actividad. El botón de la actividad
+  // siguiente aparece justo donde estaba el que se acaba de pulsar, así que un
+  // doble clic completaba también esa, sin leerla, y celebraba dos veces.
+  const ultimaActividadCompletada = useRef(0);
+  const [completarBloqueado, setCompletarBloqueado] = useState(false);
+  // Retroalimentación enviándose: el cuadro no se cierra hasta que se guarda,
+  // y un segundo clic en ese intervalo la guardaba y celebraba otra vez. El
+  // ref frena el clic en el acto; el estado desactiva el botón en pantalla.
+  const enviandoRetroalimentacionRef = useRef(false);
+  const [enviandoRetroalimentacion, setEnviandoRetroalimentacion] =
+    useState(false);
   // Tarjeta del modo actual, para llevar la vista hasta ella desde el cuadro
   // de orientaciones.
   const tarjetaDelModoRef = useRef<HTMLDivElement>(null);
@@ -622,6 +672,16 @@ export const ResultsDisplay = ({ userId }: Props) => {
   // Función para completar una actividad - optimizada con useCallback
   const completeActivity = useCallback(
     async (mode: string, recommendationId: string) => {
+      // Nadie lee una actividad en menos de un segundo: un clic tan seguido
+      // del anterior es un doble clic, y se ignora.
+      const ahora = Date.now();
+      if (ahora - ultimaActividadCompletada.current < MARGEN_DOBLE_CLIC_MS) {
+        return;
+      }
+      ultimaActividadCompletada.current = ahora;
+      setCompletarBloqueado(true);
+      setTimeout(() => setCompletarBloqueado(false), MARGEN_DOBLE_CLIC_MS);
+
       const currentProgress =
         recommendationStatus[mode]?.recommendationProgress?.[recommendationId];
       if (!currentProgress) return;
@@ -860,6 +920,9 @@ export const ResultsDisplay = ({ userId }: Props) => {
     );
 
     if (allAnswered) {
+      if (enviandoRetroalimentacionRef.current) return;
+      enviandoRetroalimentacionRef.current = true;
+      setEnviandoRetroalimentacion(true);
       try {
         const userRef = doc(db, "users", userId);
         // Con sufijo, como el resto de los campos por intento. Sin él, una
@@ -878,6 +941,8 @@ export const ResultsDisplay = ({ userId }: Props) => {
       setShowFeedbackModal(false);
       setCurrentFeedbackRec(null);
       setFeedbackAnswers({});
+      enviandoRetroalimentacionRef.current = false;
+      setEnviandoRetroalimentacion(false);
     } else {
       setFaltanRespuestas(true);
     }
@@ -920,39 +985,40 @@ export const ResultsDisplay = ({ userId }: Props) => {
           ? userData?.testResults2
           : userData?.testResults;
 
-        // Medalla por cada modo que dejó el nivel bajo entre un intento y
-        // otro. Se compara con las respuestas del primer intento, que son la
-        // fuente; los testResults guardados podrían no existir.
-        const superados =
+        // Medalla por cada modo que salió medio o alto. En el segundo intento
+        // se marca además cuál dejó el nivel bajo, comparando con las
+        // respuestas del primero, que son la fuente; los testResults guardados
+        // podrían no existir.
+        const anteriores =
           isRetake && userData?.answers
-            ? (() => {
-                const anteriores = calculateResults(userData.answers as Answers);
-                return MODES.filter(
-                  (mode) =>
-                    anteriores[mode].level === "BAJO" &&
-                    calculatedResults[mode].level !== "BAJO"
-                ).map((mode) => ({
-                  mode,
-                  antes: anteriores[mode].level,
-                  ahora: calculatedResults[mode].level,
-                }));
-              })()
-            : [];
-        setModosSuperados(superados);
+            ? calculateResults(userData.answers as Answers)
+            : null;
+        const nuevasMedallas = MODES.filter(
+          (mode) => calculatedResults[mode].level !== "BAJO"
+        ).map((mode) => ({
+          mode,
+          ahora: calculatedResults[mode].level,
+          antes:
+            anteriores?.[mode].level === "BAJO"
+              ? anteriores[mode].level
+              : undefined,
+        }));
+        setMedallas(nuevasMedallas);
 
         if (!existingResults) {
           await saveResultsToFirebase(calculatedResults, calculatedTotal);
 
           // Sonidos de la primera vez que se muestran estos resultados, que es
           // justo al terminar el test: al recargar ya no se repiten. La
-          // medalla va primero; si hay medalla no suena además la alerta, que
-          // la taparía. La música de fondo arranca cuando terminan.
-          if (superados.length > 0) {
-            celebrarMedalla();
-          } else if (
-            MODES.some((mode) => calculatedResults[mode].level === "BAJO")
-          ) {
-            sonarAlEntrar(reproducirEfecto("alerta"));
+          // medalla va primero y, si además hay algún modo bajo, tras la
+          // subida de nivel suena la alerta en lugar de la fanfarria.
+          const hayModoBajo = MODES.some(
+            (mode) => calculatedResults[mode].level === "BAJO"
+          );
+          if (nuevasMedallas.length > 0) {
+            celebrarMedalla(hayModoBajo);
+          } else if (hayModoBajo) {
+            void reproducirEfecto("alerta");
           }
         }
 
@@ -1279,10 +1345,16 @@ export const ResultsDisplay = ({ userId }: Props) => {
   );
 
   // Botón "¡Felicitaciones!" de un modo medio o alto.
-  const felicitar = useCallback((mode: Mode) => {
-    celebrarFelicitacion();
-    setFelicitados((prev) => ({ ...prev, [mode]: true }));
-  }, []);
+  // Una sola celebración por modo: después ya se ve el "¡Muy bien!", y el
+  // botón queda desactivado.
+  const felicitar = useCallback(
+    (mode: Mode) => {
+      if (felicitados[mode]) return;
+      celebrarFelicitacion();
+      setFelicitados((prev) => ({ ...prev, [mode]: true }));
+    },
+    [felicitados]
+  );
 
   // ¿Están completas todas las actividades de todos los modos?
   const areAllModesCompleted = useCallback(() => {
@@ -1317,12 +1389,38 @@ export const ResultsDisplay = ({ userId }: Props) => {
     !!results && Object.keys(recommendationStatus).length > 0;
   const programaCompleto = progresoCargado && areAllModesCompleted();
   const programaCompletoAntes = useRef<boolean | null>(null);
+  // Música de cierre pendiente de sonar: ver el efecto de más abajo.
+  const [musicaDeCierrePendiente, setMusicaDeCierrePendiente] = useState(false);
+  // Si la persona sale de la pantalla, la música de cierre no debe arrancar
+  // ni seguir sonando.
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+      pararMusicaDeCierre();
+    };
+  }, []);
   useEffect(() => {
     if (!progresoCargado) return;
     const antes = programaCompletoAntes.current;
     programaCompletoAntes.current = programaCompleto;
-    if (antes === false && programaCompleto) celebrarPrograma();
+    if (antes === false && programaCompleto) {
+      celebrarPrograma();
+      setMusicaDeCierrePendiente(true);
+    }
   }, [programaCompleto, progresoCargado]);
+
+  // Música de cierre: unos segundos de fondo mientras se lee el mensaje final.
+  // Se completa el programa en esta sesión, así que solo suena una vez, y no
+  // al volver a entrar. Si la última actividad abre la retroalimentación, el
+  // mensaje queda detrás del cuadro: la música espera a que se cierre, y a que
+  // acabe la campana que suena al enviarla.
+  useEffect(() => {
+    if (!musicaDeCierrePendiente || showFeedbackModal) return;
+    setMusicaDeCierrePendiente(false);
+    void sonarMusicaDeCierre(() => !montado.current);
+  }, [musicaDeCierrePendiente, showFeedbackModal]);
 
   const isCurrentModeCompleted = useCallback(() => {
     if (!currentModeData || !currentModeStatus) return false;
@@ -1372,9 +1470,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
   }
 
   return (
-    // pb-20: margen para el botón flotante de la música, que si no tapa los
-    // últimos botones de la pantalla en el celular.
-    <div className="w-full px-2 sm:px-4 pb-20">
+    <div className="w-full px-2 sm:px-4">
       <h1 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8 text-white">
         Resultados: modos de afrontamiento a la tensión académica
       </h1>
@@ -1387,30 +1483,38 @@ export const ResultsDisplay = ({ userId }: Props) => {
         </span>
       </div>
 
-      <MusicaDeFondo />
-
-      {/* Medalla del segundo intento: un modo que salió bajo en el primero y
-          ya no. Se queda a la vista en cada visita; el sonido y el confeti,
-          solo la primera vez. */}
-      {modosSuperados.length > 0 && (
+      {/* Medallas: una por cada modo medio o alto. Se quedan a la vista en
+          cada visita; el sonido y el confeti, solo la primera vez. */}
+      {medallas.length > 0 && (
         <div className="mb-4 sm:mb-6 rounded-xl border-2 border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-100 p-4 sm:p-6 shadow-lg text-center">
           <div className="mx-auto mb-3 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 shadow-md ring-4 ring-yellow-200">
             <Medal size={44} className="text-white" aria-hidden="true" />
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-amber-900 mb-2">
-            ¡Medalla de logro!
+            {medallas.length === 1 ? "¡Medalla de logro!" : "¡Medallas de logro!"}
           </h2>
           <ul className="space-y-1 text-amber-900 text-sm sm:text-base">
-            {modosSuperados.map(({ mode, antes, ahora }) => (
+            {medallas.map(({ mode, antes, ahora }) => (
               <li key={mode}>
-                Superaste el nivel bajo en el modo{" "}
-                <strong>{MODE_LABELS[mode].toLowerCase()}</strong>: pasaste de{" "}
-                {antes} a {ahora}.
+                {antes ? (
+                  <>
+                    Superaste el nivel bajo en el modo{" "}
+                    <strong>{MODE_LABELS[mode].toLowerCase()}</strong>: pasaste
+                    de {antes} a {ahora}.
+                  </>
+                ) : (
+                  <>
+                    Alcanzaste el nivel {ahora} en el modo{" "}
+                    <strong>{MODE_LABELS[mode].toLowerCase()}</strong>.
+                  </>
+                )}
               </li>
             ))}
           </ul>
           <p className="mt-3 text-amber-800 text-sm sm:text-base">
-            Tu esfuerzo con las actividades dio resultado. ¡Sigue así!
+            {medallas.some(({ antes }) => antes)
+              ? "Tu esfuerzo con las actividades dio resultado. ¡Sigue así!"
+              : "¡Felicitaciones! Sigue cuidando estas estrategias."}
           </p>
         </div>
       )}
@@ -1568,7 +1672,8 @@ export const ResultsDisplay = ({ userId }: Props) => {
                         <button
                           type="button"
                           onClick={() => felicitar(mode)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium"
+                          disabled={felicitados[mode]}
+                          className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-60 disabled:cursor-default disabled:hover:bg-green-600"
                         >
                           ¡Felicitaciones!
                         </button>
@@ -1675,6 +1780,7 @@ export const ResultsDisplay = ({ userId }: Props) => {
                             onQuestionChange={handleQuestionChange}
                             onCompleteActivity={completeActivity}
                             onCountdownComplete={handleCountdownComplete}
+                            completarBloqueado={completarBloqueado}
                           />
                         ))}
                     </>
@@ -1821,15 +1927,19 @@ export const ResultsDisplay = ({ userId }: Props) => {
             <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4 mt-4 sm:mt-6">
               <button
                 onClick={handleCloseFeedbackModal}
-                className="px-3 sm:px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition-colors text-sm sm:text-base"
+                disabled={enviandoRetroalimentacion}
+                className="px-3 sm:px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cerrar
               </button>
               <button
                 onClick={submitAllFeedback}
-                className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
+                disabled={enviandoRetroalimentacion}
+                className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Enviar Retroalimentación
+                {enviandoRetroalimentacion
+                  ? "Enviando…"
+                  : "Enviar Retroalimentación"}
               </button>
             </div>
           </div>

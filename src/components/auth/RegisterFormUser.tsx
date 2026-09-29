@@ -24,7 +24,17 @@ interface PersonalInfo {
   carrera: string;
   ciclo: string;
   departamento: string;
+  // Opcional. Se guarda solo si se rellena, y siempre como 9 dígitos.
+  celular?: string;
 }
+
+// Un celular peruano: 9 dígitos empezando por 9, con o sin el +51 delante.
+// Se aceptan espacios y guiones al escribirlo, y se quitan al guardarlo.
+// Devuelve null si no es un celular válido.
+export const normalizarCelular = (valor: string): string | null => {
+  const digitos = valor.replace(/[\s-]/g, "").replace(/^\+?51(?=9\d{8}$)/, "");
+  return /^9\d{8}$/.test(digitos) ? digitos : null;
+};
 
 export default function RegisterForm() {
   const [step, setStep] = useState(1);
@@ -149,11 +159,26 @@ export default function RegisterForm() {
       return;
     }
 
+    // El celular es opcional: vacío no se guarda, pero si se escribe tiene
+    // que ser válido.
+    const { celular, ...datosObligatorios } = personalInfo;
+    const celularEscrito = celular?.trim() ?? "";
+    const celularNormalizado = celularEscrito
+      ? normalizarCelular(celularEscrito)
+      : null;
+    if (celularEscrito && !celularNormalizado) {
+      setError("El celular debe tener 9 dígitos y empezar por 9");
+      return;
+    }
+    const datosPersonales = celularNormalizado
+      ? { ...datosObligatorios, celular: celularNormalizado }
+      : datosObligatorios;
+
     setLoading(true);
     try {
       // Registrar usuario y esperar a que complete. La navegación la resuelve
       // Redirect en cuanto el contexto publica el usuario.
-      await registerUser(email, password, invitationCode.trim(), personalInfo);
+      await registerUser(email, password, invitationCode.trim(), datosPersonales);
     } catch (err: any) {
       setError(err.message || "Error al registrar usuario");
     } finally {
@@ -424,6 +449,26 @@ export default function RegisterForm() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="celular"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Celular <span className="font-normal text-gray-500">(opcional)</span>
+                </label>
+                <input
+                  id="celular"
+                  name="celular"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="987 654 321"
+                  value={personalInfo.celular ?? ""}
+                  onChange={handlePersonalInfoChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
               </div>
             </>
           )}

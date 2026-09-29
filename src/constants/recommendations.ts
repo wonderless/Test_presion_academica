@@ -34,9 +34,22 @@ export type ActivityBlock =
   | { tipo: "parrafo"; texto: string }
   | { tipo: "lista"; puntos: string[] }
 
+// Imagen que acompaña a un ejercicio. Solo algunos la llevan. El archivo va en
+// public/imagenes/actividades/. `width` y `height` son las medidas reales del
+// archivo en píxeles: con ellas el navegador reserva el hueco con la
+// proporción correcta antes de que cargue, y la imagen se muestra entera, sin
+// recortes. `alt` la describe en una línea para quien usa lector de pantalla.
+export interface ImagenDeActividad {
+  src: string
+  alt: string
+  width: number
+  height: number
+}
+
 export interface Activity {
   title: string
   cuerpo: ActivityBlock[]
+  imagen?: ImagenDeActividad
 }
 
 export interface DayActivities {
@@ -69,6 +82,12 @@ export const allRecommendations: Record<Mode, RecommendationItem[]> = {
               cuerpo: [
                 { tipo: "parrafo", texto: `Antes de dormir reflexiono sobre los trabajos que dejan los profesores y repito 10 veces en mi interior (dejando intervalos de 5 segundos) “las reglas de la estructura de los trabajos que dejan los profesores son muy importantes para así poder desarrollar las competencias de mi profesión".` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-04.jpg",
+                alt: "Indicaciones del docente para un trabajo académico junto a la lista de tareas de una estudiante",
+                width: 1536,
+                height: 1024,
+              },
             },
             {
               title: `Ejercicio para enfocarse correctamente 2`,
@@ -430,6 +449,12 @@ Paso 5: Entrego con confianza." El objetivo es que esta secuencia se convierta e
                 { tipo: "parrafo", texto: `Mapea tus horarios disponibles de costo-beneficios, horas de traslado, sueño etc. Analiza las opciones según y clasificarlo según el nivel de tensión percibido.
 De preferencia, elige la opción que te permita dormir al menos 6 horas, tener tiempo para comer sin prisas y cuyo nivel de tensión estimado sea el más bajo.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-18.jpg",
+                alt: "Tabla que compara opciones de horario según sus costos, beneficios y la tensión académica que generan",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de identificación de distorsiones cognitivas`,
@@ -493,6 +518,12 @@ De preferencia, elige la opción que te permita dormir al menos 6 horas, tener t
               cuerpo: [
                 { tipo: "parrafo", texto: `Los pensamientos como "No voy a terminar", "Esto es demasiado difícil" interrumpen el foco. Cuando aparezcan, no los enfrentes con lógica, sino con humor o exageración absurda. Por ejemplo, si piensas "Nunca terminaré", respóndete mentalmente con "Claro que no, y seguramente los extraterrestres me vendrán a ayudar". Esta técnica, llamada "detención del pensamiento con humor", rompe la cadena de rumiación y le quita poder a la idea catastrófica sin generar un debate interno agotador.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-19.jpg",
+                alt: "Estudiante concentrado en su laptop, rodeado de pensamientos positivos y señales de progreso",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de “estado de fluidez”`,
@@ -522,6 +553,12 @@ De preferencia, elige la opción que te permita dormir al menos 6 horas, tener t
               cuerpo: [
                 { tipo: "parrafo", texto: `Si sueles pensar “No es necesario tomar apuntes porque después puedo revisar las diapositivas” o “Puedo prestar atención sin escribir nada”, identifica si este pensamiento realmente te ayuda a aprender. Luego, reemplázalo por una idea más funcional. Cierra los ojos y repite en tu interior 5 veces, dejando intervalos de 5 segundos: “Tomar apuntes me ayuda a mantener la atención, organizar la información y recordar mejor lo aprendido.” Después, escribe esta frase en una hoja y colócala en un lugar visible de tu espacio de estudio.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-21.jpg",
+                alt: "Cinco pasos para cambiar un pensamiento por una idea útil y dejarla escrita en el espacio de estudio",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de auto-instrucciones`,
@@ -646,6 +683,12 @@ Luego repite 5 veces: “Prestar atención y tomar apuntes durante la clase redu
 ☐ Otros: __________
 Coloca esta lista cerca de la puerta de tu casa o en un lugar que puedas observar antes de salir.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-23.jpg",
+                alt: "Estudiante revisando su lista de materiales junto a la puerta antes de salir a clases",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de auto-instrucciones`,
@@ -701,6 +744,12 @@ Coloca esta lista cerca de la puerta de tu casa o en un lugar que puedas observa
                 { tipo: "lista", puntos: [`Ver claramente al docente o la pantalla.`, `Escuchar adecuadamente.`, `Tomar apuntes cómodamente.`, `Reducir distractores cercanos.`] },
                 { tipo: "parrafo", texto: `Una vez elegido el lugar, permanece allí durante la mayor parte de la clase.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-24.jpg",
+                alt: "Estudiante sentada en el aula en un lugar desde donde ve la pantalla, escucha y toma apuntes",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de auto-instrucciones`,
@@ -754,6 +803,12 @@ Reflexiona brevemente: ¿Qué características del lugar me ayudaron o dificulta
               cuerpo: [
                 { tipo: "parrafo", texto: `Identifica la creencia: "Aún falta mucho, empezaré después". Reflexiona sobre cuántas veces has tenido que estudiar apurado y con ansiedad. Sustituye esa creencia por: "El tiempo pasa volando. Empezar hoy es un acto de autoprotección, no de exageración". Repite esta frase en tu interior 10 veces mientras marcas en tu calendario la fecha exacta del examen.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-01.jpg",
+                alt: "Estudiante escribiendo su plan de estudio frente a un calendario de exámenes",
+                width: 1536,
+                height: 1024,
+              },
             },
             {
               title: `Ejercicio de “Cuenta regresiva inversiva”`,
@@ -800,6 +855,12 @@ Reflexiona brevemente: ¿Qué características del lugar me ayudaron o dificulta
               cuerpo: [
                 { tipo: "parrafo", texto: `Imprime o abre el sílabo de una de tus asignaturas actuales. Con un resaltador, subraya las unidades, los logros de aprendizaje y las fechas de evaluación. Luego, en una hoja aparte, escribe una versión resumida con tus propias palabras, como si fueras a explicarle a un compañero qué es lo más importante que deben aprender y en qué fechas.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-02.jpg",
+                alt: "Sílabo de una asignatura junto a un plan de estudio y un calendario semanal",
+                width: 1536,
+                height: 1024,
+              },
             },
             {
               title: `Ejercicio de reestructuración cognitiva (Del "debería" al "quiero")`,
@@ -846,6 +907,12 @@ Reflexiona brevemente: ¿Qué características del lugar me ayudaron o dificulta
               cuerpo: [
                 { tipo: "parrafo", texto: `El mismo día que el profesor deja el trabajo, en los siguientes 30 minutos, realiza una acción mínima que no tome más de 2 minutos: leer el enunciado, descargar el formato, o escribir el título en un documento en blanco. Esta pequeña acción cumple el objetivo psicológico de "abrir el expediente". Una vez abierto, tu cerebro ya no lo ve como una tarea nueva y aterradora, sino como algo ya iniciado.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-03.jpg",
+                alt: "Estudiante dividiendo en pasos un trabajo recién asignado",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de reestructuración cognitiva (Atacar la idealización del "futuro yo")`,
@@ -1317,6 +1384,12 @@ Reflexiona brevemente: ¿Qué características del lugar me ayudaron o dificulta
               cuerpo: [
                 { tipo: "parrafo", texto: `40 minutos antes de tu hora meta de dormir, apaga o deja en modo silencioso el celular fuera del alcance de tu mano. Toma una hoja y anota rápidamente los pendientes del día siguiente bajo el título: "Esto ya está registrado y lo atenderé mañana despierto". Con esto liberas la memoria de trabajo de tu cerebro.` },
               ],
+              imagen: {
+                src: "/imagenes/actividades/item-20.jpg",
+                alt: "Estudiante apagando el celular 40 minutos antes de dormir, con sus pendientes anotados en la mesa de noche",
+                width: 1600,
+                height: 900,
+              },
             },
             {
               title: `Ejercicio de relajación fisiológica (Respiración diafragmática 4-7-8)`,

@@ -54,6 +54,7 @@ interface UserTestData {
     apellidos: string;
     carrera: string;
     ciclo: string;
+    celular?: string;
   };
   answers?: Answers;
   answers2?: Answers;
@@ -187,6 +188,7 @@ export default function OtherData() {
             user.personalInfo?.nombres && user.personalInfo?.apellidos
               ? `${user.personalInfo.nombres} ${user.personalInfo.apellidos}`
               : "N/A",
+          Celular: user.personalInfo?.celular || "N/A",
           Edad: user.personalInfo?.edad || "N/A",
           Sexo: user.personalInfo?.sexo || "N/A",
           Región: user.personalInfo?.departamento || "N/A",
@@ -208,7 +210,7 @@ export default function OtherData() {
       // Los anchos van en el orden de las columnas de arriba.
       const anchoDePuntajes = MODES.map(() => 14).concat([12]);
       ws["!cols"] = [
-        5, 25, 30, 8, 15, 15, 25, 25, 25, 10, 15,
+        5, 25, 30, 12, 8, 15, 15, 25, 25, 25, 10, 15,
         ...Array.from({ length: NUM_ITEMS }, () => 6),
         ...anchoDePuntajes,
         ...Array.from({ length: NUM_ITEMS }, () => 6),
@@ -245,6 +247,7 @@ export default function OtherData() {
     "N°",
     "Email",
     "Nombre y Apellido",
+    "Celular",
     "Edad",
     "Sexo",
     "Región",
@@ -343,6 +346,9 @@ export default function OtherData() {
                     {user.personalInfo?.nombres && user.personalInfo?.apellidos
                       ? `${user.personalInfo.nombres} ${user.personalInfo.apellidos}`
                       : "N/A"}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {user.personalInfo?.celular || "N/A"}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {user.personalInfo?.edad || "N/A"}
