@@ -9,7 +9,7 @@
 //   · Efectos grabados, en public/sonidos/, para los momentos que el
 //     documento "Nuevos cambios" pide distinguir: la alerta de un modo bajo,
 //     la ovación al culminar un día, la campana de la retroalimentación y la
-//     fanfarria de la medalla. Son de Pixabay (licencia libre, sin atribución
+//     sonido de ganador de la medalla. Son de Pixabay (licencia libre, sin atribución
 //     obligatoria); la alerta y la ovación están recortadas a unos segundos,
 //     porque los originales duran 23 y 30.
 //   · El sonido de cierre, corto, que suena una vez al aparecer el mensaje
@@ -34,7 +34,7 @@ const ARCHIVOS: Record<EfectoDeSonido, string> = {
   dia: "/sonidos/ovacion.mp3",
   retroalimentacion: "/sonidos/campana-de-victoria.mp3",
   subidaDeNivel: "/sonidos/subida-de-nivel.mp3",
-  medalla: "/sonidos/fanfarria-medalla.mp3",
+  medalla: "/sonidos/ganador-medalla.mp3",
   cierre: "/sonidos/cierre.mp3",
   bienvenida: "/sonidos/bienvenida.mp3",
 }
@@ -155,9 +155,9 @@ export const reproducirEfecto = (efecto: EfectoDeSonido): Promise<boolean> => {
   return fin
 }
 
-// La medalla: la subida de nivel y, al acabar, la fanfarria. Si algo corta la
-// subida de nivel, la fanfarria ya no suena: si no, llegaría tarde y cortaría
-// a su vez lo que la interrumpió. Lo mismo pasa en desarrollo, donde React
+// La medalla: la subida de nivel y, al acabar, el sonido de ganador. Si algo
+// corta la subida de nivel, el de ganador ya no suena: si no, llegaría tarde
+// y cortaría a su vez lo que la interrumpió. Lo mismo pasa en desarrollo, donde React
 // carga los resultados dos veces y la segunda medalla corta a la primera.
 export const reproducirMedalla = async () => {
   if (await reproducirEfecto("subidaDeNivel")) {

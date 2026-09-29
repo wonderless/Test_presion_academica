@@ -9,7 +9,7 @@
 // Cada celebración suena además (src/lib/sonido.ts): la actividad suelta, con
 // una campanita; el día culminado, la recomendación y el programa, con una
 // ovación; la retroalimentación, con una campana de victoria, y la medalla,
-// con su propia fanfarria. El confeti no sale para quien
+// con un sonido de ganador. El confeti no sale para quien
 // pidió al sistema reducir el movimiento (`disableForReducedMotion`); el sonido
 // sí, porque esa preferencia es sobre el movimiento, no sobre el audio.
 //

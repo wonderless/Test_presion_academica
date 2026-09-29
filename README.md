@@ -125,7 +125,7 @@ Cada logro suena distinto, para que se distinga el avance diario del final:
 | Una actividad suelta | Campanita generada en el navegador |
 | Culminar un día, una recomendación o el programa | Ovación (`ovacion.mp3`) |
 | Enviar la retroalimentación | Campana de victoria (`campana-de-victoria.mp3`) |
-| Medalla (ningún modo BAJO) | Subida de nivel, fanfarria y confeti dorado |
+| Medalla (ningún modo BAJO) | Subida de nivel, sonido de ganador (`ganador-medalla.mp3`) y confeti dorado |
 | Mensaje final, al terminar todas las actividades | Sonido de cierre, una vez (`cierre.mp3`) |
 
 Los archivos están en `public/sonidos/` y salen de Pixabay (licencia libre, sin
