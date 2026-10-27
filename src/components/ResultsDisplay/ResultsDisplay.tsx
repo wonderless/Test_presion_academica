@@ -239,7 +239,7 @@ const NavegacionPreguntas = memo<NavegacionProps>(
             "bg-yellow-600 hover:bg-yellow-700"
           )}
         >
-          Anterior
+          Anterior actividad
         </OptimizedButton>
         <OptimizedButton
           onClick={() =>
@@ -251,7 +251,7 @@ const NavegacionPreguntas = memo<NavegacionProps>(
             "bg-green-600 hover:bg-green-700"
           )}
         >
-          Siguiente
+          Siguiente actividad
         </OptimizedButton>
       </div>
     );
@@ -513,6 +513,165 @@ const RecommendationDisplay = memo<RecommendationDisplayProps>((props) => {
 });
 RecommendationDisplay.displayName = "RecommendationDisplay";
 
+// Una actividad del plan, vista desde fuera de su modo, para el panel de
+// progreso.
+type EstadoEnElPlan = "hecha" | "disponible" | "en-espera";
+
+interface EntradaDelPlan {
+  clave: string;
+  mode: Mode;
+  // Posición del ítem en modeQuestions[mode], que es lo que guarda
+  // `currentQuestionIndex`.
+  indice: number;
+  recomendacion: RecommendationItem;
+  estado: EstadoEnElPlan;
+  // Solo en espera: cuándo se abre el día siguiente.
+  desbloqueo: Date | null;
+  diasHechos: number;
+  totalDias: number;
+}
+
+const textoDelEstado = (entrada: EntradaDelPlan): string => {
+  const { estado, diasHechos, totalDias, desbloqueo } = entrada;
+  if (estado === "hecha") return "✓ Completada";
+  if (estado === "en-espera" && desbloqueo) {
+    return `⏳ Día ${diasHechos + 1} se abre a las ${formatearDesbloqueo(desbloqueo)}`;
+  }
+  return diasHechos === 0
+    ? `▶ Por empezar · Día 1 de ${totalDias}`
+    : `▶ Día ${diasHechos + 1} de ${totalDias} disponible`;
+};
+
+// Panel fijo arriba con el avance de TODO el programa. Los participantes
+// creían haber terminado cuando aún les faltaban actividades: la pantalla les
+// felicitaba al cerrar un día o un ítem y en ningún sitio decía cuánto
+// quedaba, y para encontrar lo pendiente había que entender la navegación por
+// modos e ítems. Aquí se ve el total y un solo botón lleva a lo siguiente.
+const PanelDelPlan = memo<{
+  entradas: EntradaDelPlan[];
+  claveVisible: string | null;
+  listaAbierta: boolean;
+  onAlternarLista: () => void;
+  onIr: (entrada: EntradaDelPlan) => void;
+  onContinuar: () => void;
+}>(({ entradas, claveVisible, listaAbierta, onAlternarLista, onIr, onContinuar }) => {
+  const total = entradas.length;
+  const hechas = entradas.filter((e) => e.estado === "hecha").length;
+  const diasTotales = entradas.reduce((suma, e) => suma + e.totalDias, 0);
+  const diasHechos = entradas.reduce((suma, e) => suma + e.diasHechos, 0);
+  const hayDisponible = entradas.some((e) => e.estado === "disponible");
+  const proximoDesbloqueo = entradas
+    .map((e) => e.desbloqueo)
+    .filter((d): d is Date => d !== null)
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+
+  return (
+    // Borde grueso del verde de los botones: sobre el fondo azul oscuro un
+    // borde azul o negro se confundía con el fondo.
+    <div className="bg-white rounded-lg shadow-lg border-4 border-green-600 p-3 sm:p-4">
+      <h2 className="font-bold text-gray-900 text-sm sm:text-base mb-1">
+        Tu programa de actividades
+      </h2>
+      <p className="text-gray-800 text-sm sm:text-base mb-2">
+        Has completado{" "}
+        <strong>
+          {hechas} de {total} {total === 1 ? "actividad" : "actividades"}
+        </strong>
+        .{" "}
+        {total - hechas > 0 && (
+          <span className="text-red-700 font-medium">
+            {total - hechas === 1
+              ? "Te falta 1."
+              : `Te faltan ${total - hechas}.`}
+          </span>
+        )}
+      </p>
+      <div
+        className="w-full bg-gray-200 rounded-full h-2.5 mb-3"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={diasTotales}
+        aria-valuenow={diasHechos}
+        aria-label="Días de actividad completados"
+      >
+        <div
+          className="bg-green-500 h-2.5 rounded-full transition-all duration-300"
+          style={{
+            width: `${diasTotales ? (diasHechos / diasTotales) * 100 : 0}%`,
+          }}
+        />
+      </div>
+
+      {hayDisponible ? (
+        <button
+          type="button"
+          onClick={onContinuar}
+          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-base font-semibold shadow"
+        >
+          ▶ Continuar con mis actividades
+        </button>
+      ) : (
+        proximoDesbloqueo && (
+          <p className="rounded-md bg-amber-50 border border-amber-300 px-3 py-2 text-amber-900 text-sm sm:text-base">
+            ⏳ Tu próxima actividad se abre a las{" "}
+            <strong>{formatearDesbloqueo(proximoDesbloqueo)}</strong>. Vuelve a
+            esa hora: tu avance queda guardado aunque cierres la página.
+          </p>
+        )
+      )}
+
+      <button
+        type="button"
+        onClick={onAlternarLista}
+        aria-expanded={listaAbierta}
+        className="mt-2 w-full text-center text-blue-700 text-sm font-medium py-1 hover:underline"
+      >
+        {listaAbierta ? "Ocultar la lista ▴" : "Ver todas mis actividades ▾"}
+      </button>
+
+      {listaAbierta && (
+        // Cada actividad en su propia caja con borde: separadas solo por una
+        // línea fina no se distinguía dónde acababa una y empezaba la otra.
+        <ul className="mt-2 max-h-[40vh] overflow-y-auto space-y-2 pr-1">
+          {entradas.map((entrada) => (
+            <li key={entrada.clave}>
+              <button
+                type="button"
+                onClick={() => onIr(entrada)}
+                className={`w-full text-left px-3 py-2 rounded-md border-2 hover:bg-blue-50 ${
+                  entrada.clave === claveVisible
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300"
+                }`}
+              >
+                <span className="block text-xs text-gray-500">
+                  Modo {MODE_LABELS[entrada.mode].toLowerCase()} · Ítem{" "}
+                  {entrada.recomendacion.relatedQuestion}
+                </span>
+                <span className="block text-sm text-gray-900 line-clamp-2">
+                  {entrada.recomendacion.title}
+                </span>
+                <span
+                  className={`block text-xs font-medium ${
+                    entrada.estado === "hecha"
+                      ? "text-green-700"
+                      : entrada.estado === "en-espera"
+                        ? "text-amber-700"
+                        : "text-blue-700"
+                  }`}
+                >
+                  {textoDelEstado(entrada)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+});
+PanelDelPlan.displayName = "PanelDelPlan";
+
 export const ResultsDisplay = ({ userId }: Props) => {
   const router = useRouter();
   const [results, setResults] = useState<Results | null>(null);
@@ -561,6 +720,10 @@ export const ResultsDisplay = ({ userId }: Props) => {
   // Tarjeta del modo actual, para llevar la vista hasta ella desde el cuadro
   // de orientaciones.
   const tarjetaDelModoRef = useRef<HTMLDivElement>(null);
+  // Panel fijo de progreso: se mide para que, al llevar la vista a una
+  // tarjeta, no quede tapada debajo de él.
+  const panelDelPlanRef = useRef<HTMLDivElement>(null);
+  const [listaAbierta, setListaAbierta] = useState(false);
 
   // Temporizadores activos
   const activeTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -1334,6 +1497,25 @@ export const ResultsDisplay = ({ userId }: Props) => {
     return info;
   }, [results, recommendationStatus, userTestAnswers, pendientesPorModo]);
 
+  // Lleva la vista a la tarjeta del modo actual, dejando sitio para el panel
+  // fijo de arriba. Se llama en el siguiente cuadro, cuando ya se ha pintado
+  // el modo o el ítem elegido.
+  const llevarVistaALaTarjeta = useCallback(() => {
+    requestAnimationFrame(() => {
+      const tarjeta = tarjetaDelModoRef.current;
+      if (!tarjeta) return;
+      const altoDelPanel = panelDelPlanRef.current?.offsetHeight ?? 0;
+      window.scrollTo({
+        top:
+          tarjeta.getBoundingClientRect().top +
+          window.scrollY -
+          altoDelPanel -
+          12,
+        behavior: "smooth",
+      });
+    });
+  }, []);
+
   // Botón "Seguir orientaciones" de un modo bajo: abre ese modo en la
   // actividad pendiente que se puede hacer ya, y lleva la vista hasta ella.
   const seguirOrientaciones = useCallback(
@@ -1341,16 +1523,130 @@ export const ResultsDisplay = ({ userId }: Props) => {
       setCurrentModeIndex(MODES.indexOf(mode));
       const { destino } = navegacionPendientes[mode];
       if (destino !== null) handleQuestionChange(mode, destino);
-      // En el siguiente cuadro, cuando ya se ha pintado el modo elegido.
-      requestAnimationFrame(() =>
-        tarjetaDelModoRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        })
-      );
+      llevarVistaALaTarjeta();
     },
-    [navegacionPendientes, handleQuestionChange]
+    [navegacionPendientes, handleQuestionChange, llevarVistaALaTarjeta]
   );
+
+  // Todas las actividades del plan, de los tres modos, en el orden en que se
+  // recorren: modo a modo y, dentro de cada uno, por número de ítem. Es lo
+  // que alimenta el panel de progreso. Las esperas vencidas cuentan como
+  // disponibles, igual que en
+  // `navegacionPendientes`; la limpieza de cada 30 segundos las abre.
+  const planDeActividades = useMemo(() => {
+    const entradas: EntradaDelPlan[] = [];
+    if (!results || !userTestAnswers) return entradas;
+    const ahora = Date.now();
+
+    for (const mode of MODES) {
+      const modeStatus = recommendationStatus?.[mode];
+      if (results[mode].level !== "BAJO" || !modeStatus) continue;
+
+      const recomendaciones = getRecommendationsForMode(
+        mode,
+        results[mode].level,
+        userTestAnswers
+      );
+      for (const rec of recomendaciones) {
+        const progreso = modeStatus.recommendationProgress?.[rec.id];
+        const totalDias = rec.days?.length ?? 0;
+        const enEspera =
+          progreso?.countdown !== null &&
+          progreso?.countdown !== undefined &&
+          !!progreso.countdownStartTime;
+        const momento = enEspera
+          ? momentoDeDesbloqueo(progreso!.countdownStartTime!)
+          : null;
+        const desbloqueo =
+          momento && momento.getTime() > ahora ? momento : null;
+
+        // Días terminados: durante la espera el día en curso ya está hecho,
+        // aunque `currentDay` no avance hasta que se abra el siguiente.
+        let diasHechos = 0;
+        if (progreso?.isCompleted) diasHechos = totalDias;
+        else if (progreso) {
+          diasHechos = enEspera ? progreso.currentDay : progreso.currentDay - 1;
+        }
+
+        entradas.push({
+          clave: `${mode}-${rec.id}`,
+          mode,
+          indice: modeQuestions[mode].indexOf(rec.relatedQuestion),
+          recomendacion: rec,
+          estado: progreso?.isCompleted
+            ? "hecha"
+            : desbloqueo
+              ? "en-espera"
+              : "disponible",
+          desbloqueo,
+          diasHechos: Math.min(Math.max(diasHechos, 0), totalDias),
+          totalDias,
+        });
+      }
+    }
+
+    return entradas.sort(
+      (a, b) =>
+        MODES.indexOf(a.mode) - MODES.indexOf(b.mode) || a.indice - b.indice
+    );
+  }, [results, recommendationStatus, userTestAnswers]);
+
+  // La actividad cuya tarjeta se está viendo.
+  const entradaVisible = useMemo(() => {
+    const indiceVisible = recommendationStatus?.[currentMode]?.currentQuestionIndex ?? 0;
+    return (
+      planDeActividades.find(
+        (e) =>
+          e.mode === currentMode &&
+          e.indice ===
+            Math.min(
+              Math.max(indiceVisible, 0),
+              modeQuestions[currentMode].length - 1
+            )
+      ) ?? null
+    );
+  }, [planDeActividades, recommendationStatus, currentMode]);
+
+  // La siguiente que se puede hacer ya, sin contar la que se ve: se busca
+  // hacia delante desde ella y se vuelve al principio al llegar al final.
+  const siguienteDisponible = useMemo(() => {
+    const desde = entradaVisible
+      ? planDeActividades.indexOf(entradaVisible)
+      : -1;
+    for (let paso = 1; paso <= planDeActividades.length; paso++) {
+      const entrada =
+        planDeActividades[(desde + paso) % planDeActividades.length];
+      if (entrada !== entradaVisible && entrada.estado === "disponible") {
+        return entrada;
+      }
+    }
+    return null;
+  }, [planDeActividades, entradaVisible]);
+
+  const irAActividad = useCallback(
+    (entrada: EntradaDelPlan) => {
+      setCurrentModeIndex(MODES.indexOf(entrada.mode));
+      if (recommendationStatus?.[entrada.mode]?.currentQuestionIndex !== entrada.indice) {
+        handleQuestionChange(entrada.mode, entrada.indice);
+      }
+      setListaAbierta(false);
+      llevarVistaALaTarjeta();
+    },
+    [recommendationStatus, handleQuestionChange, llevarVistaALaTarjeta]
+  );
+
+  const irASiguienteActividad = useCallback(() => {
+    if (siguienteDisponible) irAActividad(siguienteDisponible);
+  }, [siguienteDisponible, irAActividad]);
+
+  // "Continuar con mis actividades": la que se ve, si se puede hacer ya; si
+  // no, la siguiente disponible.
+  const continuarConElPlan = useCallback(() => {
+    if (entradaVisible?.estado === "disponible") irAActividad(entradaVisible);
+    else irASiguienteActividad();
+  }, [entradaVisible, irAActividad, irASiguienteActividad]);
+
+  const alternarLista = useCallback(() => setListaAbierta((prev) => !prev), []);
 
   // Botón "¡Felicitaciones!" de un modo medio o alto.
   // Una sola celebración por modo: después ya se ve el "¡Muy bien!", y el
@@ -1534,6 +1830,26 @@ export const ResultsDisplay = ({ userId }: Props) => {
           &nbsp;&nbsp;({total.score} de {total.max})
         </span>
       </div>
+
+      {/* Panel de progreso, fijo arriba mientras quede algo por hacer. Va
+          antes del perfil para que se vea al entrar, sin bajar. */}
+      {!ningunModoBajo &&
+        !areAllModesCompleted() &&
+        planDeActividades.length > 0 && (
+          <div
+            ref={panelDelPlanRef}
+            className="sticky top-0 z-30 mb-4 sm:mb-6 pt-1"
+          >
+            <PanelDelPlan
+              entradas={planDeActividades}
+              claveVisible={entradaVisible?.clave ?? null}
+              listaAbierta={listaAbierta}
+              onAlternarLista={alternarLista}
+              onIr={irAActividad}
+              onContinuar={continuarConElPlan}
+            />
+          </div>
+        )}
 
       {/* Medallas: una por cada modo, solo si ninguno salió bajo. Se quedan a
           la vista en cada visita; el sonido y el confeti, solo la primera vez. */}

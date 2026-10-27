@@ -107,6 +107,22 @@ Mientras un temporizador corre aparecen los botones de navegación para pasar a
 otro ítem y seguir avanzando por otro lado. Al completar los dos días se abren
 las preguntas de retroalimentación de esa recomendación.
 
+### Panel "Tu programa de actividades"
+
+Los participantes llegaban a creer que habían terminado cuando aún les
+faltaban actividades, porque en ningún sitio se decía cuánto quedaba. Por eso,
+mientras quede algo por hacer, arriba de los resultados hay un panel fijo
+(`PanelDelPlan`) con *"Has completado 3 de 9 actividades. Te faltan 6."*, una
+barra por días, un botón **Continuar con mis actividades** que lleva a la
+siguiente disponible de cualquier modo y una lista desplegable con todas y su
+estado (completada, disponible o en espera con su hora). Si todo lo que queda
+está en espera, en lugar del botón dice a qué hora volver.
+
+Sale de `planDeActividades`, que recorre las actividades de los tres modos con
+las mismas reglas que `navegacionPendientes`. No cambia ninguna regla del
+programa. Como el panel queda fijo, *Seguir orientaciones* y el panel bajan la
+vista dejando su alto libre, para que no tape la tarjeta.
+
 Para recorrer el plan entero sin esperar, use `NEXT_PUBLIC_UNLOCK_DELAY_SECONDS`
 (ver *Variables opcionales*). Nunca en producción.
 
@@ -576,7 +592,10 @@ Cubren la lógica pura —la puntuación por modo y del total, las fronteras de 
 niveles, qué actividades abre cada modo bajo, la coherencia del catálogo de
 recomendaciones, las reglas que deciden si alguien puede hacer el test y la
 verificación de la sesión— y los componentes con más lógica: la navegación por
-rol (`Redirect`), el cuestionario (`TestForm`) y el formulario de registro. Los
+rol (`Redirect`), el cuestionario (`TestForm`), el formulario de registro y la
+pantalla de resultados (`ResultsDisplay`: el panel *Tu programa de
+actividades*, la navegación entre actividades, el cierre del día 1 y el paso
+automático al segundo intento, que espera a la retroalimentación). Los
 componentes se prueban en jsdom con Firebase simulado, así que no hace falta
 navegador ni conexión.
 
