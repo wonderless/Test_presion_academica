@@ -44,6 +44,7 @@ import {
 } from "@/lib/celebracion";
 import { reproducirEfecto, sonarCierre } from "@/lib/sonido";
 import { fraseMotivacional } from "@/constants/frasesMotivacionales";
+import { evaluarAccesoAlTest, type TestUserData } from "@/lib/testAccess";
 
 interface Props {
   userId: string;
@@ -73,6 +74,12 @@ const UNLOCK_DELAY_SECONDS = leerRetardoDeDesbloqueo();
 // Tiempo durante el que se ignora un segundo clic en "Marcar Actividad
 // Completada" o "Culminar Día": ver `ultimaActividadCompletada`.
 const MARGEN_DOBLE_CLIC_MS = 800;
+
+// Pausa antes de llevar a la persona al segundo intento por su cuenta, en
+// milisegundos: casi instantáneo, solo lo justo para que vea el mensaje de
+// finalización. Con solo el botón, la mayoría no llegaba a verlo y nunca hacía
+// el segundo test.
+const ESPERA_TEST_OTRA_VEZ_MS = 500;
 
 interface ActivityProgress {
   currentDay: number;
@@ -1422,6 +1429,51 @@ export const ResultsDisplay = ({ userId }: Props) => {
     void sonarCierre(() => !montado.current);
   }, [cierrePendiente, showFeedbackModal]);
 
+  // Segundo intento automático: en cuanto aparece el mensaje de finalización
+  // se abre el test sin tener que pulsar el botón, que se queda ahí por si la
+  // navegación falla. Vale
+  // también para quien terminó en una sesión anterior y nunca pulsó el botón.
+  // Espera a que se cierre la retroalimentación, porque el mensaje queda
+  // detrás del cuadro. Sin ningún modo bajo no hubo actividades y no hay
+  // segundo intento.
+  const mensajeFinalVisible =
+    programaCompleto &&
+    MODES.some((mode) => results?.[mode]?.level === "BAJO") &&
+    !esSegundoIntento &&
+    !hasRetakenTest &&
+    !showFeedbackModal;
+
+  // Quién puede hacer el test lo decide testAccess.ts: se le pregunta con el
+  // expediente recién leído, no con el estado de esta pantalla, que puede ir
+  // por detrás (`hasRetakenTest` se carga aparte).
+  const irAlTestOtraVez = useCallback(async () => {
+    try {
+      const userDoc = await getDoc(doc(db, "users", userId));
+      const estado = evaluarAccesoAlTest(
+        userDoc.data() as TestUserData | undefined
+      );
+      if (estado.tipo !== "puede-repetir" || !montado.current) return;
+
+      // Lo mismo que hace el botón del panel al empezar el test.
+      localStorage.removeItem("testAnswers");
+      localStorage.setItem("testStartTime", Date.now().toString());
+      void reproducirEfecto("bienvenida");
+      router.push("/test");
+    } catch (err) {
+      console.error("Error al abrir el segundo intento:", err);
+    }
+  }, [userId, router]);
+
+  useEffect(() => {
+    if (!mensajeFinalVisible) return;
+
+    const espera = setTimeout(() => {
+      void irAlTestOtraVez();
+    }, ESPERA_TEST_OTRA_VEZ_MS);
+
+    return () => clearTimeout(espera);
+  }, [mensajeFinalVisible, irAlTestOtraVez]);
+
   const isCurrentModeCompleted = useCallback(() => {
     if (!currentModeData || !currentModeStatus) return false;
     if (currentModeData.level !== "BAJO") return true;
@@ -1854,6 +1906,12 @@ export const ResultsDisplay = ({ userId }: Props) => {
               >
                 Realizar Test Otra Vez
               </button>
+
+              {mensajeFinalVisible && (
+                <p className="mt-3 text-white text-sm sm:text-base" aria-live="polite">
+                  Abriendo el test...
+                </p>
+              )}
             </div>
           )}
         </>

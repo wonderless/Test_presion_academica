@@ -178,6 +178,19 @@ regla, que vive en `src/lib/testAccess.ts`:
 | Ningún modo bajo | No: no hubo intervención que medir |
 | Ya hizo los dos intentos | No |
 
+### El segundo intento se abre solo
+
+Al terminar todas las actividades, `/results` muestra el mensaje de
+finalización con el botón *Realizar Test Otra Vez* y, a los **0,5 segundos**
+(`ESPERA_TEST_OTRA_VEZ_MS`, en `ResultsDisplay.tsx`), abre el test
+automáticamente, con la bienvenida, igual que desde el panel. Se añadió porque
+casi nadie veía el botón y el segundo intento no se hacía. El botón se
+conserva.
+
+Vale también para quien terminó las actividades en una sesión anterior y
+vuelve a `/results`, y espera a que se cierre el cuadro de retroalimentación. Antes de navegar se le pregunta a `testAccess.ts` con el
+expediente recién leído: si no devuelve `puede-repetir`, no pasa nada.
+
 ### Dónde se guarda cada intento
 
 El primer intento va en las propiedades estándar y el segundo en las mismas con
